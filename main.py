@@ -24,8 +24,8 @@ def main():
     # Setup Telegram bot
     telegram_config = {
         'token': TELEGRAM_TOKEN,
-        'admin_user_ids': ["106876290"],
-        'allowed_user_ids': ["106876290"]
+        'admin_user_ids': ["106876290", "6995969877", "1178891552"],
+        'allowed_user_ids': ["106876290", "6995969877", "1178891552"]
     }
 
     # Create Telegram bot instance
