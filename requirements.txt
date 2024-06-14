@@ -1,0 +1,6 @@
+python-dotenv
+asyncio
+icecream
+requests
+python-telegram-bot
+matplotlib

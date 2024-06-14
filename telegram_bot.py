@@ -1,6 +1,5 @@
-
-from __future__ import annotations
-
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import os
 import json
 import logging
@@ -8,74 +7,37 @@ import asyncio
 import traceback
 import requests
 import subprocess
+import tempfile
 
-from telegram import ForceReply, Update, BotCommand, \
-    InlineQueryResultArticle, InputTextMessageContent, \
-    InlineKeyboardButton, InlineKeyboardMarkup, \
-    KeyboardButton,ReplyKeyboardMarkup, ReplyKeyboardRemove, \
-    WebAppInfo, BotCommandScopeChat, BotCommandScopeDefault, \
-    InlineQueryResultArticle, BotCommandScopeAllGroupChats, constants, \
-    LabeledPrice
-from telegram.constants import ParseMode
-from telegram.error import RetryAfter, TimedOut
-from telegram.ext import filters, MessageHandler, CommandHandler, Application, ApplicationBuilder, ContextTypes, \
-    InlineQueryHandler, CallbackQueryHandler, CallbackContext, PreCheckoutQueryHandler, ConversationHandler
-
-from html import escape
-from uuid import uuid4
-
-# from utils import is_group_chat, get_thread_id, message_text, wrap_with_indicator, split_into_chunks, \
-#     edit_message_with_retry, get_stream_cutoff_values, is_allowed, is_admin, \
-#     get_reply_to_message_id, add_chat_request_to_usage_tracker, error_handler, is_direct_result, handle_direct_result, \
-#     cleanup_intermediate_files
-from icecream import ic
+from analytics import generate_inventory_chart, generate_stats_chart
 
 
 START_ROUTES, END_ROUTES = range(2)
 
 
 class TelegramBot:
-   
 
     def __init__(self, config: dict) -> None:
-       
-
-        # Store the bot configuration
         self.config = config
-
-        # Set up the bot localization
-        # bot_language = self.config['bot_language']
-
-        # Set up the bot commands
         self.commands = [
-            BotCommand(command='/start', description='start the dialog with bot'),
-            BotCommand(command='ℹ️ /info', description='invokes information about available commands'),
-            BotCommand(command='📊 /stats', description='Показывает статистику по товару'),
+            BotCommand(command='/start', description='Start the dialog with bot'),
+            BotCommand(command='/info', description='Invokes information about available commands'),
+            BotCommand(command='/stats', description='Показывает статистику по товару'),
+            BotCommand(command='/inventory', description='Показывает складские остатки'),
         ]
-        self.disallowed_message = 'disallowed'
-        self.usage = {}
-        self.last_message = {}
-        self.inline_queries_cache = {}
-
 
     async def start(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Handles the start command.
-        """
-        # Check if the user is allowed to use the bot
         if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
             await update.message.reply_html(
-            rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
-            disable_web_page_preview=True
+                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
+                disable_web_page_preview=True
             )
             return
 
-        start_message = rf"Привет, {update.effective_user.mention_html()}!  Я бот для отслеживания складских остатков"
-        # 
+        start_message = rf"Привет, {update.effective_user.mention_html()}! Я бот для отслеживания складских остатков"
 
         await update.message.reply_html(
             start_message,
-            # reply_markup=ForceReply(selective=True),
             disable_web_page_preview=True
         )
 
@@ -85,24 +47,20 @@ class TelegramBot:
         )
 
     async def info(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Sends information about the bot.
-        """
-        # Check if the user is allowed to use the bot
         if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
             await update.message.reply_html(
-            rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
-            disable_web_page_preview=True
+                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
+                disable_web_page_preview=True
             )
             return
 
         commands = self.commands
-        command_data = '\n\n'+'\n'.join([str(command['command']+' - '+command['description']) for command in commands])
+        command_data = '\n\n' + '\n'.join([str(command.command + ' - ' + command.description) for command in commands])
         await update.message.reply_html(
             rf"Доступные команды: {command_data}",
             disable_web_page_preview=True
         )
-        
+
         keyboard = [
             [
                 InlineKeyboardButton("Option 1", callback_data="1"),
@@ -118,106 +76,59 @@ class TelegramBot:
             reply_markup=reply_markup
         )
 
-
-    async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Parses the CallbackQuery and updates the message text."""
-        query = update.callback_query
-
-        # CallbackQueries need to be answered, even if no notification to the user is needed
-        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-        await query.answer()
-
-        await query.edit_message_text(text=f"Selected option: {query.data}")
-
-
-    async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Returns token usage statistics for current day and month.
-        """
-        # Check if the user is allowed to use the bot
+    async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
             await update.message.reply_html(
-            rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
-            disable_web_page_preview=True
+                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</а> для получения большей информации""",
+                disable_web_page_preview=True
             )
             return
 
-        
-        # await update.message.reply_html(
-        #     rf"Статистика. Выберите текст или картинку",
-        #     disable_web_page_preview=True
-        # )
-        keyboard = [
-            [
-                InlineKeyboardButton("Картинка", callback_data="pic"),
-                InlineKeyboardButton("JSON", callback_data="json"),
-            ],
-            # [InlineKeyboardButton("Option 3", callback_data="3")],
-        ]
+        # Загрузка данных из базы данных
+        # Пример данных для демонстрации
+        data = {
+            'Товар': ['Товар 1', 'Товар 2', 'Товар 3', 'Товар 4'],
+            'Количество': [100, 150, 200, 250]
+        }
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_html(
-            rf"Статистика. Выберите текст или картинку",
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
-        print("HERE!\n")
-        if update.answer_callback_query != None:
-            callback_query_id = update.callback_query.id
-            data = update.callback_query.data.encode('utf-8').decode()
-            print("HELLOOOO\n")
-            # self.info(update, context)
+        # Генерация графика
+        tmp_file_path = generate_inventory_chart(data)
+
+        # Отправка графика пользователю
+        with open(tmp_file_path, 'rb') as photo:
+            await update.message.reply_photo(photo)
+
+        # Удаление временного файла
+        os.remove(tmp_file_path)
+
+    async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
             await update.message.reply_html(
-                rf"Статистика. Текст",
-                disable_web_page_preview=True,
+                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
+                disable_web_page_preview=True
             )
-                # await update.message.reply_text("Статистика", reply_markup=keyboard)
-        
+            return
 
-    
+        # Пример данных для демонстрации
+        stats_data = {
+            'Дата': ['2023-06-01', '2023-06-02', '2023-06-03', '2023-06-04'],
+            'Значение': [10, 15, 7, 20]
+        }
+
+        # Генерация графика
+        tmp_file_path = generate_stats_chart(stats_data)
+
+        # Отправка графика пользователю
+        with open(tmp_file_path, 'rb') as photo:
+            await update.message.reply_photo(photo)
+
+        # Удаление временного файла
+        os.remove(tmp_file_path)
+
     async def post_init(self, application: Application) -> None:
-        """
-        Post initialization hook for the bot.
-        """
-        await application.bot.set_my_commands([(botCommand.command.split('/')[1], botCommand.description) for botCommand in self.group_commands])
-        await application.bot.set_my_commands([(botCommand.command.split('/')[1], botCommand.description) for botCommand in self.commands])
-
-    
-    async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Returns `ConversationHandler.END`, which tells the
-        ConversationHandler that the conversation is over.
-        """
-        query = update.callback_query
-        await query.answer()
-        await query.edit_message_text(text="See you next time!")
-        return ConversationHandler.END
-
-
-    async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Prompt same text & keyboard as `start` does but not as new message"""
-        # Get CallbackQuery from Update
-        query = update.callback_query
-        # CallbackQueries need to be answered, even if no notification to the user is needed
-        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-        await query.answer()
-        keyboard = [
-            [
-                InlineKeyboardButton("1", callback_data=str(ONE)),
-                InlineKeyboardButton("2", callback_data=str(TWO)),
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        # Instead of sending a new message, edit the message that
-        # originated the CallbackQuery. This gives the feeling of an
-        # interactive menu.
-        await query.edit_message_text(text="Start handler, Choose a route", reply_markup=reply_markup)
-        return START_ROUTES
+        await application.bot.set_my_commands([(botCommand.command, botCommand.description) for botCommand in self.commands])
 
     def run(self) -> None:
-        """
-        Runs the bot indefinitely until the user presses Ctrl+C
-        """
-
         try:
             application = ApplicationBuilder() \
                 .token(self.config['token']) \
@@ -231,5 +142,6 @@ class TelegramBot:
         application.add_handler(CommandHandler('start', self.start))
         application.add_handler(CommandHandler("info", self.info))
         application.add_handler(CommandHandler('stats', self.stats))
-       
+        application.add_handler(CommandHandler('inventory', self.inventory))
+
         application.run_polling(allowed_updates=Update.ALL_TYPES)
