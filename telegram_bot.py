@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from sqlalchemy import create_engine
 
-from analytics import generate_inventory_chart, generate_stats_chart, history_remains_for_product
+from analytics import generate_inventory_chart, generate_stats_chart, history_remains_for_product, make_one_row
 
 START_ROUTES, END_ROUTES = range(2)
 
@@ -44,8 +44,10 @@ class TelegramBot:
             BotCommand(command='/info', description='Invokes information about available commands'),
             BotCommand(command='/stats', description='Показывает статистику по товару'),
             BotCommand(command='/inventory', description='Показывает складские остатки'),
+            BotCommand(command='/make_json', description='Создает JSON файл с закупкой')
         ]
         self.engine = TelegramBot.__connect_to_db()
+        self.counter = 0
 
     async def start(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
@@ -96,6 +98,36 @@ class TelegramBot:
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
+
+    async def make_json(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
+            await update.message.reply_html(
+                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</а> для получения большей информации""",
+                disable_web_page_preview=True
+            )
+            return
+        products = {'вода питьевая "МИЯ" 0,33 л. 24 бут/упак.': 10}
+
+        final_answer = {}
+
+        final_answer['id'] = int(self.counter)  # уникальный номер
+        final_answer['lotEntityId'] = 0  # не надо
+        final_answer['CustomerId'] = str(update.message.from_user.id)  # telegram id кто писал
+        final_answer['rows'] = []
+        for product_name, prediction_num in products.items():
+            final_answer['rows'].append(make_one_row(product_name, prediction_num, self.engine))
+
+        tmp_json_filename = 'final_answer.json'
+        with open(tmp_json_filename, 'w', encoding='utf-8') as json_file:
+            json.dump(final_answer, json_file, ensure_ascii=False, indent=4)
+
+        # Отправим JSON файл через Telegram-бота
+        with open(tmp_json_filename, 'rb') as json_file:
+            await context.bot.send_document(chat_id=update.message.chat_id, document=json_file)
+
+        os.remove(tmp_json_filename)
+
+        self.counter += 1
 
     async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
@@ -162,5 +194,6 @@ class TelegramBot:
         application.add_handler(CommandHandler("info", self.info))
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('inventory', self.inventory))
+        application.add_handler(CommandHandler('make_json', self.make_json))
 
         application.run_polling(allowed_updates=Update.ALL_TYPES)

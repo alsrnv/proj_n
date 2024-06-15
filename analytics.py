@@ -51,7 +51,7 @@ def history_remains_for_product(product_name, engine):
 
     values = {}
     for num_quater in range(1, 5):
-        query = f'''select "Счет", "Сальдо на начало периода (Кол-во Де", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Сальдо на конец периода (Кол-во Деб", "Квартал"
+        query = f'''select "Счет", "Сальдо на начало периода (Кол-во Де", "Сальдо на конец периода (Кол-во Деб", "Квартал"
                     from financial_data
                     where "Код" is not NULL
                     and "Счет" = '{product_name}'
@@ -61,13 +61,13 @@ def history_remains_for_product(product_name, engine):
         if len(num_at_beginning) == 0:
             values[day_of_quarter(num_quater, 'first')] = 0
         else:
-            values[day_of_quarter(num_quater, 'first')] = int(num_at_beginning[0])
+            values[day_of_quarter(num_quater, 'first')] = int(num_at_beginning.sum())
         if num_quater == 4:
             num_at_end = pd.read_sql(query, engine).fillna(0)['Сальдо на конец периода (Кол-во Деб']
             if len(num_at_end) == 0:
                 values[day_of_quarter(num_quater, 'last')] = 0
             else:
-                values[day_of_quarter(num_quater, 'last')] = int(num_at_end[0])
+                values[day_of_quarter(num_quater, 'last')] = int(num_at_end.sum())
 
     return values
 
@@ -121,6 +121,75 @@ def all_distinct_products(engine):
     """
     query = f'''select distinct "Счет" from financial_data'''
     return pd.read_sql(query, engine)['Счет'].to_list()
+
+
+def make_kpgz_spgz_ste(product_name, engine):
+    query = f"""SELECT *
+    FROM reference_data
+    WHERE "Название СТЕ" ilike '%%{product_name}%%' 
+    limit 1"""
+
+    return pd.read_csv('kpgz_spgz_ste.csv').iloc[0].to_dict()
+
+    return pd.read_sql(query, engine)
+
+
+def make_contracts(product_name, engine):
+    query = f"""SELECT *
+    FROM contracts
+    WHERE "Наименование СПГЗ" ilike '%%{product_name}%%' 
+    limit 1"""
+
+    return pd.read_csv('contracts.csv').iloc[0].to_dict()
+
+    return pd.read_sql(query, engine)
+
+
+def make_one_row(product_name, prediction_num, engine):
+    product_kpgz_spgz_ste = make_kpgz_spgz_ste(product_name, engine)
+    product_contracts = make_contracts(product_name, engine)
+
+    one_row = {
+
+    }
+    one_row["DeliverySchedule"] = {  # График поставки
+        "dates": {
+            "end_date": "",  # Дата окончания поставки – данные рождаются в процессе прогнозирования
+            "start_date": ""  # Дата начала поставки– данные рождаются в процессе прогнозирования
+        },
+        "deliveryAmount": prediction_num,  # Объем поставки– данные рождаются в процессе прогнозирования
+        "deliveryConditions": "",  # Условия поставки– данные рождаются в процессе прогнозирования
+        "year": 0  # Год– данные рождаются в процессе прогнозирования
+    }
+    one_row["address"] = {  # Адрес поставки– данные рождаются в процессе прогнозирования
+        "gar_id": "",  # Идентификатор ГАР – это федеральный справочник адресов
+        "text": ""  # Адрес в текстовой форме – если не нашли ГАР – можно использовать это полне
+    }
+
+    one_row['entityId'] = product_kpgz_spgz_ste['СПГЗ']
+    one_row['id'] = product_kpgz_spgz_ste['СПГЗ код']
+    one_row['nmc'] = 0  # сумма
+    one_row['okei_code'] = ''
+    one_row['purchaseAmount'] = prediction_num  # Объем поставки - от дениса
+
+    one_row['spgzCharacteristics'] = []
+    one_row['spgzCharacteristics'].append(
+        {"characteristicName": product_contracts['Наименование СПГЗ'],  # характеристика
+         "characteristicSpgzEnums": [
+         ]})
+
+    one_row['spgzCharacteristics'][0]['characteristicSpgzEnums'].append({
+        "value": product_contracts['ID СПГЗ']
+    })
+    one_row['spgzCharacteristics'][0]['conditionTypeId'] = 0  # тип условия
+    one_row['spgzCharacteristics'][0]['kpgzCharacteristicId'] = product_contracts[
+        'Конечный код КПГЗ']  # идентификатор характерис��ики КПГЗ
+    one_row['spgzCharacteristics'][0]['okei_id'] = 0  # идентификатор ОКЕИ
+    one_row['spgzCharacteristics'][0]['selectType'] = 0  # тип выбора
+    one_row['spgzCharacteristics'][0]['typeId'] = 0  # тип
+    one_row['spgzCharacteristics'][0]['value1'] = 0  # значение 1
+    one_row['spgzCharacteristics'][0]['value2'] = 0  # значение 2
+    return one_row
 
 
 def generate_stats_chart(stats_data):
