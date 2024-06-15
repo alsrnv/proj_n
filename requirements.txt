@@ -4,3 +4,8 @@ icecream
 requests
 python-telegram-bot
 matplotlib
+plotly
+kaleido
+pandas
+sqlalchemy
+psycopg2

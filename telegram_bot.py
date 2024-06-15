@@ -9,8 +9,7 @@ import requests
 import subprocess
 import tempfile
 
-from analytics import generate_inventory_chart, generate_stats_chart
-
+from analytics import generate_inventory_chart, generate_stats_chart, history_remains_for_product
 
 START_ROUTES, END_ROUTES = range(2)
 
@@ -86,13 +85,11 @@ class TelegramBot:
 
         # Загрузка данных из базы данных
         # Пример данных для демонстрации
-        data = {
-            'Товар': ['Товар 1', 'Товар 2', 'Товар 3', 'Товар 4'],
-            'Количество': [100, 150, 200, 250]
-        }
+        product_name = ' '.join(context.args)
+        data = history_remains_for_product(product_name)
 
         # Генерация графика
-        tmp_file_path = generate_inventory_chart(data)
+        tmp_file_path = generate_inventory_chart(data, product_name)
 
         # Отправка графика пользователю
         with open(tmp_file_path, 'rb') as photo:
@@ -126,7 +123,8 @@ class TelegramBot:
         os.remove(tmp_file_path)
 
     async def post_init(self, application: Application) -> None:
-        await application.bot.set_my_commands([(botCommand.command, botCommand.description) for botCommand in self.commands])
+        await application.bot.set_my_commands(
+            [(botCommand.command, botCommand.description) for botCommand in self.commands])
 
     def run(self) -> None:
         try:
