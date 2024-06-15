@@ -10,27 +10,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
-def connect_to_db():
-    """
-    Функция для подключения к базе данных.
-    :return: engine: Объект подключения к базе данных.
-    """
-    # Создаем подключение к базе данных
-    # Параметры подключения к базе данных
-    db_config = {
-        'user': 'user_main',
-        'password': 'user108',
-        'host': '85.193.90.86',
-        'port': '5532',
-        'database': 'hack_db'
-    }
-
-    # Создание строки подключения
-    connection_string = f"postgresql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
-
-    return create_engine(connection_string)
-
-
 def day_of_quarter(quarter, day_type, year='2022'):
     """
     Функция для определения первого или последнего дня квартала.
@@ -62,14 +41,13 @@ def day_of_quarter(quarter, day_type, year='2022'):
         return last_day.strftime('%d-%m-%Y')
 
 
-def history_remains_for_product(product_name):
+def history_remains_for_product(product_name, engine):
     """
     Функция для получения истории остатков товара.
     :param product_name: Название товара.
     :return: values: Словарь с датами и остатками товара.
     """
     # Создаем подключение к базе данных
-    engine = connect_to_db()
 
     values = {}
     for num_quater in range(1, 5):
@@ -134,6 +112,15 @@ def generate_inventory_chart(data, product_name):
     tmp_file_path = tmp_file.name
 
     return tmp_file_path
+
+
+def all_distinct_products(engine):
+    """
+    Функция для получения списка всех уникальных товаров.
+    :return: Список уникальных товаров.
+    """
+    query = f'''select distinct "Счет" from financial_data'''
+    return pd.read_sql(query, engine)['Счет'].to_list()
 
 
 def generate_stats_chart(stats_data):

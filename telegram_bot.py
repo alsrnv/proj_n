@@ -8,6 +8,7 @@ import traceback
 import requests
 import subprocess
 import tempfile
+from sqlalchemy import create_engine
 
 from analytics import generate_inventory_chart, generate_stats_chart, history_remains_for_product
 
@@ -15,6 +16,26 @@ START_ROUTES, END_ROUTES = range(2)
 
 
 class TelegramBot:
+    @staticmethod
+    def __connect_to_db():
+        """
+        Функция для подключения к базе данных.
+        :return: engine: Объект подключения к базе данных.
+        """
+        # Создаем подключение к базе данных
+        # Параметры подключения к базе данных
+        db_config = {
+            'user': 'user_main',
+            'password': 'user108',
+            'host': '85.193.90.86',
+            'port': '5532',
+            'database': 'hack_db'
+        }
+
+        # Создание строки подключения
+        connection_string = f"postgresql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+
+        return create_engine(connection_string)
 
     def __init__(self, config: dict) -> None:
         self.config = config
@@ -24,6 +45,7 @@ class TelegramBot:
             BotCommand(command='/stats', description='Показывает статистику по товару'),
             BotCommand(command='/inventory', description='Показывает складские остатки'),
         ]
+        self.engine = TelegramBot.__connect_to_db()
 
     async def start(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
@@ -84,9 +106,8 @@ class TelegramBot:
             return
 
         # Загрузка данных из базы данных
-        # Пример данных для демонстрации
         product_name = ' '.join(context.args)
-        data = history_remains_for_product(product_name)
+        data = history_remains_for_product(product_name, self.engine)
 
         # Генерация графика
         tmp_file_path = generate_inventory_chart(data, product_name)
