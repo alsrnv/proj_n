@@ -3,6 +3,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from keycloak import KeycloakOpenID
 import os
 import logging
+import json
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -12,6 +13,7 @@ class TelegramBot:
         self.application = ApplicationBuilder().token(config['token']).build()
         self.authorized_users = {}
         self.pending_auth = {}
+        self.counter = 1  # Добавляем счетчик для JSON ID
 
         # Add command handlers
         self.application.add_handler(CommandHandler('start', self.start))
@@ -20,6 +22,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler('stats', self.stats))
         self.application.add_handler(CommandHandler('login', self.login))
         self.application.add_handler(CommandHandler('product', self.product))
+        self.application.add_handler(CommandHandler('make_json', self.make_json))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
         logging.debug("TelegramBot initialized with config and handlers added.")
@@ -43,6 +46,7 @@ class TelegramBot:
             '/stats - Показать статистику\n'
             '/inventory - Показать складские остатки\n'
             '/product - Выбор продукта для отображения складских остатков\n'
+            '/make_json - Создает JSON файл с закупкой\n'
             '/login - Авторизация через Keycloak'
         )
 
@@ -169,6 +173,37 @@ class TelegramBot:
             logging.error(f"Failed to generate inventory chart: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
 
+    async def make_json(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+
+        import analytics
+        engine = analytics.get_database_connection()
+        products = analytics.all_regular_product_names(engine)
+
+        final_answer = {}
+
+        final_answer['id'] = int(self.counter)  # уникальный номер
+        final_answer['lotEntityId'] = 0  # не надо
+        final_answer['CustomerId'] = str(update.message.from_user.id)  # telegram id кто писал
+        final_answer['rows'] = []
+        for product_name in products:
+            cnt_to_buy, sum_to_buy = analytics.get_cnt_sum(product_name, engine)
+            final_answer['rows'].append(analytics.make_one_row(product_name,            cnt_to_buy, sum_to_buy, engine))
+
+        tmp_json_filename = 'final_answer.json'
+        with open(tmp_json_filename, 'w', encoding='utf-8') as json_file:
+            json.dump(final_answer, json_file, ensure_ascii=False, indent=4)
+
+        # Отправим JSON файл через Telegram-бота
+        with open(tmp_json_filename, 'rb') as json_file:
+            await context.bot.send_document(chat_id=update.message.chat_id, document=json_file)
+
+        os.remove(tmp_json_filename)
+
+        self.counter += 1
+
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
         return self.authorized_users.get(user_id, False)
@@ -178,7 +213,6 @@ class TelegramBot:
         self.application.run_polling()
 
 if __name__ == "__main__":
-    import json
     import threading
 
     config = {
@@ -194,3 +228,4 @@ if __name__ == "__main__":
     flask_thread.start()
 
     bot.run()
+

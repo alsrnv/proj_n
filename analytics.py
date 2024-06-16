@@ -59,11 +59,17 @@ def history_remains_for_product(product_name, engine):
 def make_kpgz_spgz_ste(product_name, engine):
     query = f"""
     SELECT *
-    FROM refences_data
+    FROM reference_data
     WHERE "Название СТЕ" ILIKE '%%{product_name}%%'
     LIMIT 1
     """
-    return pd.read_sql(query, engine).iloc[0].to_dict()
+    result = pd.read_sql(query, engine)
+    if result.empty:
+        # Получить все столбцы из таблицы и заполнить их пустыми значениями "-"
+        columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name='reference_data'"
+        columns = pd.read_sql(columns_query, engine)['column_name'].tolist()
+        return {col: '-' for col in columns}
+    return result.iloc[0].to_dict()
 
 def make_contracts(product_name, engine):
     query = f"""
@@ -72,7 +78,15 @@ def make_contracts(product_name, engine):
     WHERE "Наименование СПГЗ" ILIKE '%%{product_name}%%'
     LIMIT 1
     """
-    return pd.read_sql(query, engine).iloc[0].to_dict()
+    result = pd.read_sql(query, engine)
+    if result.empty:
+        # Получить все столбцы из таблицы и заполнить их пустыми значениями "-"
+        columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name='contracts'"
+        columns = pd.read_sql(columns_query, engine)['column_name'].tolist()
+        return {col: '-' for col in columns}
+    return result.iloc[0].to_dict()
+
+
 
 def all_distinct_products(engine):
     query = f"""SELECT DISTINCT "Счет" FROM financial_data"""
@@ -166,3 +180,162 @@ def generate_inventory_for_product(product_name):
         raise ValueError(f"Нет данных для продукта: {product_name}")
 
     return generate_inventory_chart(values, product_name)
+
+def make_one_row(product_name, cnt_to_buy, sum_to_buy, engine):
+    product_kpgz_spgz_ste = make_kpgz_spgz_ste(product_name, engine)
+    product_contracts = make_contracts(product_name, engine)
+    product_financial = make_financial_data(product_name, engine)
+
+    one_row = {}
+    one_row["DeliverySchedule"] = {  # График поставки
+        "dates": {
+            "end_date": day_of_quarter(1, 'last', str(product_financial['Год'] + 1)),
+            # Дата окончания поставки – данные рождаются в процессе прогнозирования
+            "start_date": day_of_quarter(1, 'first', str(product_financial['Год'] + 1))
+            # Дата начала поставки– данные рождаются в процессе прогнозирования
+        },
+        "deliveryAmount": cnt_to_buy,  # Объем поставки– данные рождаются в процессе прогнозирования
+        "deliveryConditions": "",  # Условия поставки– данные рождаются в процессе прогнозирования
+        "year": product_financial['Год'] + 1  # Год– данные рождаются в процессе прогнозирования
+    }
+    one_row["address"] = {  # Адрес поставки– данные рождаются в процессе прогнозирования
+        "gar_id": "",  # Идентификатор ГАР – это федеральный справочник адресов
+        "text": ""  # Адрес в текстовой форме – если не нашли ГАР – можно использовать это полне
+    }
+
+    one_row['entityId'] = product_kpgz_spgz_ste['СПГЗ']
+    one_row['id'] = product_kpgz_spgz_ste['СПГЗ код']
+    one_row['nmc'] = sum_to_buy  # сумма
+    one_row['okei_code'] = ''
+    one_row['purchaseAmount'] = cnt_to_buy  # Объем поставки - от дениса
+
+    one_row['spgzCharacteristics'] = []
+    one_row['spgzCharacteristics'].append(
+        {"characteristicName": product_contracts['Наименование СПГЗ'],  # характеристика
+         "characteristicSpgzEnums": [
+         ]})
+
+    one_row['spgzCharacteristics'][0]['characteristicSpgzEnums'].append({
+        "value": product_contracts['ID СПГЗ']
+    })
+    one_row['spgzCharacteristics'][0]['conditionTypeId'] = 0  # тип условия
+    one_row['spgzCharacteristics'][0]['kpgzCharacteristicId'] = product_contracts[
+        'Конечный код КПГЗ']  # идентификатор характеристик КПГЗ
+    one_row['spgzCharacteristics'][0]['okei_id'] = 0  # идентификатор О
+    one_row['spgzCharacteristics'][0]['okei_id'] = 0  # идентификатор ОКЕИ
+    one_row['spgzCharacteristics'][0]['selectType'] = 0  # тип выбора
+    one_row['spgzCharacteristics'][0]['typeId'] = 0  # тип
+    one_row['spgzCharacteristics'][0]['value1'] = 0  # значение 1
+    one_row['spgzCharacteristics'][0]['value2'] = 0  # значение 2
+    return one_row
+
+def exponential_smoothing(series, alpha):
+    '''
+    Функция для применения экспоненциального сглаживания к временному ряду.
+    Args:
+        series:
+        alpha:
+
+    Returns:
+
+    '''
+    result = [series[0]]
+
+    for n in range(1, len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
+    return result[-1]
+
+def get_cnt_sum(product_name: str, engine):
+    try:
+        query = f"""select * from financial_data where "Счет" = '{product_name}' and "Обороты за период (Сумма Дебет)" is not NULL"""  # and "Сальдо на начало периода (Сумма Дебет)" is not NULL
+        data = pd.read_sql(query, engine)
+        data = data[data['Код'].isnull() != True]
+        data = data.fillna(0)
+
+        if len(data) <= 1:
+            return -2, -2
+
+        data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
+        data['used_sum'] = data['Обороты за период (Сумма Дебет)']
+
+        bought_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
+        for ind, row in data.iterrows():
+            bought_cnt[row['Квартал']] = row['used_cnt']
+        #     bought_cnt
+
+        bought_sum = {1: 0, 2: 0, 3: 0, 4: 0}
+        for ind, row in data.iterrows():
+            bought_sum[row['Квартал']] = row['used_sum']
+        #     bought_sum
+
+        cnt_to_buy = exponential_smoothing(np.asarray(list(bought_cnt.values())), 0.6)
+        sum_to_buy = exponential_smoothing(np.asarray(list(bought_sum.values())), 0.6)
+
+        return int(np.ceil(cnt_to_buy)), int(np.ceil(sum_to_buy))
+    except Exception as e:
+        print(e)
+        return -1, -1
+
+def all_regular_product_names(engine):
+    query = f'''select "Счет", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Квартал"
+                        from financial_data
+                        where "Код" is not NULL '''
+    financial_data_df = pd.read_sql(query, engine)
+    lst = financial_data_df['Счет'].unique().tolist()
+    lst_regular = []
+    for product_name in lst:
+        df = financial_data_df[financial_data_df['Счет'] == product_name]
+        if (df.groupby('Квартал')['Обороты за период (Кол-во Дебет)'].sum() > 0).sum() >= 2:
+            lst_regular.append(product_name)
+    return lst_regular
+
+def generate_stats_chart(stats_data):
+    """
+    Generates a line chart for stats data.
+    
+    Parameters:
+        stats_data (dict): Dictionary with 'Дата' and 'Значение' keys.
+    
+    Returns:
+        str: Path to the saved chart image.
+    """
+    fig, ax = plt.subplots()
+    ax.plot(stats_data['Дата'], stats_data['Значение'])
+    ax.set_title('Статистика использования')
+    ax.set_xlabel('Дата')
+    ax.set_ylabel('Значение')
+
+    # Сохранение графика во временный файл
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+        plt.savefig(tmp_file.name)
+        tmp_file_path = tmp_file.name
+
+    return tmp_file_path
+
+def make_financial_data(product_name, engine):
+    query = f"""SELECT *
+            FROM financial_data
+            where "Счет" = '{product_name}'
+            limit 1
+            """
+    return pd.read_sql(query, engine).iloc[0].to_dict()
+
+def make_json_file(engine, user_id):
+    products = all_regular_product_names(engine)
+
+    final_answer = {}
+    final_answer['id'] = 1  # уникальный номер
+    final_answer['lotEntityId'] = 0  # не надо
+    final_answer['CustomerId'] = user_id  # telegram id кто писал
+    final_answer['rows'] = []
+    for product_name in products:
+        cnt_to_buy, sum_to_buy = get_cnt_sum(product_name, engine)
+        final_answer['rows'].append(make_one_row(product_name, cnt_to_buy, sum_to_buy, engine))
+
+    tmp_json_filename = 'final_answer.json'
+    with open(tmp_json_filename, 'w', encoding='utf-8') as json_file:
+        json.dump(final_answer, json_file, ensure_ascii=False, indent=4)
+
+    return tmp_json_filename
+
+

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактирование JSON</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #json-editor {
+            width: 100%;
+            height: 400px;
+            font-family: monospace;
+        }
+        #save-button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Редактирование JSON</h1>
+    <textarea id="json-editor"></textarea>
+    <button id="save-button" onclick="saveJson()">Сохранить</button>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            fetch('/get_json')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('json-editor').value = JSON.stringify(data, null, 4);
+                });
+        });
+
+        function saveJson() {
+            const jsonData = JSON.parse(document.getElementById('json-editor').value);
+            fetch('/edit_json', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(jsonData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('JSON сохранен успешно');
+                } else {
+                    alert('Ошибка при сохранении JSON');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+</body>
+</html>
