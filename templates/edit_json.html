@@ -3,57 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Редактирование JSON</title>
+    <title>Edit JSON</title>
     <style>
         body {
             font-family: Arial, sans-serif;
+            margin: 20px;
         }
-        #json-editor {
+        #json-input {
             width: 100%;
             height: 400px;
-            font-family: monospace;
         }
         #save-button {
-            margin-top: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <h1>Редактирование JSON</h1>
-    <textarea id="json-editor"></textarea>
-    <button id="save-button" onclick="saveJson()">Сохранить</button>
+    <h1>Edit JSON</h1>
+    <textarea id="json-input"></textarea>
+    <br>
+    <button id="save-button">Save</button>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener('DOMContentLoaded', (event) => {
             fetch('/get_json')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('json-editor').value = JSON.stringify(data, null, 4);
+                    document.getElementById('json-input').value = JSON.stringify(data, null, 4);
                 });
-        });
 
-        function saveJson() {
-            const jsonData = JSON.parse(document.getElementById('json-editor').value);
-            fetch('/edit_json', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(jsonData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('JSON сохранен успешно');
-                } else {
-                    alert('Ошибка при сохранении JSON');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        }
+            document.getElementById('save-button').addEventListener('click', () => {
+                const updatedJson = document.getElementById('json-input').value;
+                fetch('/update_json', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: updatedJson,
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('JSON saved successfully!');
+                    } else {
+                        alert('Error saving JSON: ' + data.error);
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>

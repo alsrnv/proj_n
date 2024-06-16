@@ -23,6 +23,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler('login', self.login))
         self.application.add_handler(CommandHandler('product', self.product))
         self.application.add_handler(CommandHandler('make_json', self.make_json))
+        self.application.add_handler(CommandHandler('edit_json', self.edit_json))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
         logging.debug("TelegramBot initialized with config and handlers added.")
@@ -47,7 +48,32 @@ class TelegramBot:
             '/inventory - Показать складские остатки\n'
             '/product - Выбор продукта для отображения складских остатков\n'
             '/make_json - Создает JSON файл с закупкой\n'
-            '/login - Авторизация через Keycloak'
+            '/login - Авторизация через Keycloak\n'
+            '/edit_json - Изменить json'
+        )
+
+    
+
+    async def edit_json(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /edit_json command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+
+        webapp_url = os.getenv('WEBAPP_URL')
+        if not webapp_url:
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
+            return
+
+        if not webapp_url.startswith("https://"):
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
+            return
+
+        await update.message.reply_text(
+            'Для редактирования JSON файла перейдите по ссылке ниже:',
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Редактировать JSON", web_app=WebAppInfo(url=f"{webapp_url}/edit_json.html"))]]
+            )
         )
 
     async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

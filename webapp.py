@@ -3,6 +3,7 @@ import os
 import logging
 import requests
 import asyncio
+import json
 
 class WebApp:
     def __init__(self, bot):
@@ -10,6 +11,7 @@ class WebApp:
         self.app.secret_key = os.getenv('FLASK_SECRET_KEY')
         self.bot = bot  # Сохраняем объект bot в атрибуте класса
         self.setup_routes()
+        self.latest_json = None  # Сохраняем последний JSON для редактирования
 
     def setup_routes(self):
         @self.app.route('/login.html')
