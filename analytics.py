@@ -108,11 +108,11 @@ def make_kpgz_spgz_ste(product_name, engine):
     return result.iloc[0].to_dict()
 
 def make_contracts(product_name, engine):
-    query = f"""SELECT distinct("Название СТЕ")
-    FROM reference_data
+    query = f"""SELECT distinct("Наименование СПГЗ")
+    FROM contracts
     """
     # Список названий и текстовое название для сравнения
-    titles_in_reference_data = pd.read_sql(query, engine)["Название СТЕ"].tolist()
+    titles_in_reference_data = pd.read_sql(query, engine)["Наименование СПГЗ"].tolist()
     reference_data_title = return_best_match(product_name, titles_in_reference_data)
 
     query = f"""
@@ -272,52 +272,6 @@ def make_one_row(product_name, cnt_to_buy, sum_to_buy, engine):
     one_row['spgzCharacteristics'][0]['value2'] = 0  # значение 2
     return one_row
 
-# def exponential_smoothing(series, alpha):
-#     '''
-#     Функция для применения экспоненциального сглаживания к временному ряду.
-#     Args:
-#         series:
-#         alpha:
-
-#     Returns:
-
-#     '''
-#     result = [series[0]]
-
-#     for n in range(1, len(series)):
-#         result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
-#     return result[-1]
-
-# def get_cnt_sum(product_name: str, engine):
-#     try:
-#         query = f"""select * from financial_data where "Счет" = '{product_name}' and "Обороты за период (Сумма Дебет)" is not NULL"""  # and "Сальдо на начало периода (Сумма Дебет)" is not NULL
-#         data = pd.read_sql(query, engine)
-#         data = data[data['Код'].isnull() != True]
-#         data = data.fillna(0)
-
-#         if len(data) <= 1:
-#             return -2, -2
-
-#         data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
-#         data['used_sum'] = data['Обороты за период (Сумма Дебет)']
-
-#         bought_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
-#         for ind, row in data.iterrows():
-#             bought_cnt[row['Квартал']] = row['used_cnt']
-#         #     bought_cnt
-
-#         bought_sum = {1: 0, 2: 0, 3: 0, 4: 0}
-#         for ind, row in data.iterrows():
-#             bought_sum[row['Квартал']] = row['used_sum']
-#         #     bought_sum
-
-#         cnt_to_buy = exponential_smoothing(np.asarray(list(bought_cnt.values())), 0.6)
-#         sum_to_buy = exponential_smoothing(np.asarray(list(bought_sum.values())), 0.6)
-
-#         return int(np.ceil(cnt_to_buy)), int(np.ceil(sum_to_buy))
-#     except Exception as e:
-#         print(e)
-#         return -1, -1
 
 def double_exponential_smoothing(series, alpha, beta, horizon=1):
     h = horizon - 1
@@ -332,7 +286,7 @@ def double_exponential_smoothing(series, alpha, beta, horizon=1):
         last_level, level = level, alpha * value + (1 - alpha) * (level + trend)
         trend = beta * (level - last_level) + (1 - beta) * trend
         result.append(level + trend)
-    return result[-horizon:]
+    return list(map(abs, result[-horizon:]))
 
 
 def get_cnt_sum(product: str, engine, period: int = 1):

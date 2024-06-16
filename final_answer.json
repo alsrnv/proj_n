@@ -24,14 +24,14 @@
             "purchaseAmount": 2.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Установка информационной наклейки, м2",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 16024896
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "02.12.99",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -46,7 +46,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": -0.0,
+                "deliveryAmount": 1.0,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -56,19 +56,19 @@
             },
             "entityId": null,
             "id": null,
-            "nmc": -551.6280000000004,
+            "nmc": 551.6280000000004,
             "okei_code": "",
-            "purchaseAmount": -0.0,
+            "purchaseAmount": 1.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Изготовление визитной карточки, 2+0, тираж от 100 до 500шт",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 3271548
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "02.17.04.04.99",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -98,14 +98,14 @@
             "purchaseAmount": 463.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Вода питьевая упакованная",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 152157259
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "01.01.14.01",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -135,14 +135,14 @@
             "purchaseAmount": 385.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Вода питьевая, высшей категории, негазированная  объемом 0.33 л.",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 27225225
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "01.01.14.01.01",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -172,14 +172,14 @@
             "purchaseAmount": 18.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Изготовление визитной карточки",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 137201181
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "02.17.04.08",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -209,14 +209,14 @@
             "purchaseAmount": 39.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Карта бесконтактная, пластиковая, 125кГц, 64 бит",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 3295322
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "01.03.02.11",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -246,14 +246,14 @@
             "purchaseAmount": 2.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Печать журнала",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 8532496
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "02.17.04.04.99",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
@@ -283,14 +283,14 @@
             "purchaseAmount": 783.0,
             "spgzCharacteristics": [
                 {
-                    "characteristicName": "-",
+                    "characteristicName": "Подвеска крепления штанги для гардеробных конструкций Elfa Classic, металл,цвет белый, высота 75мм, ширина 35 мм, глубина 40мм, d 25мм",
                     "characteristicSpgzEnums": [
                         {
-                            "value": "-"
+                            "value": 21332214
                         }
                     ],
                     "conditionTypeId": 0,
-                    "kpgzCharacteristicId": "-",
+                    "kpgzCharacteristicId": "01.16.28",
                     "okei_id": 0,
                     "selectType": 0,
                     "typeId": 0,
