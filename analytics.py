@@ -9,6 +9,7 @@ import plotly
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import json
+import numpy as np
 
 def day_of_quarter(quarter, day_type, year='2022'):
     quarter = int(quarter)

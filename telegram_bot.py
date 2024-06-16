@@ -214,7 +214,7 @@ class TelegramBot:
         final_answer['rows'] = []
         for product_name in products:
             cnt_to_buy, sum_to_buy = analytics.get_cnt_sum(product_name, engine)
-            final_answer['rows'].append(analytics.make_one_row(product_name, cnt_to_buy, sum_to_buy, engine))
+            final_answer['rows'].append(analytics.make_one_row(product_name, cnt_to_buy[0], sum_to_buy[0], engine))
 
         tmp_json_filename = 'final_answer.json'
         try:
@@ -232,7 +232,7 @@ class TelegramBot:
             with open(tmp_json_filename, 'rb') as json_file:
                 await context.bot.send_document(chat_id=update.message.chat_id, document=json_file)
 
-            os.remove(tmp_json_filename)
+            #os.remove(tmp_json_filename)
         except Exception as e:
             logging.error(f"Error while creating or sending JSON file: {str(e)}")
             await update.message.reply_text(f"Ошибка при создании или отправке JSON файла: {str(e)}")

@@ -1,0 +1,303 @@
+{
+    "id": 1,
+    "lotEntityId": 0,
+    "CustomerId": "106876290",
+    "rows": [
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 2.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": null,
+            "id": null,
+            "nmc": 59873.29248,
+            "okei_code": "",
+            "purchaseAmount": 2.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": -0.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": -551.6280000000004,
+            "okei_code": "",
+            "purchaseAmount": -0.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 463.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": 119279.10240000002,
+            "okei_code": "",
+            "purchaseAmount": 463.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 385.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": 205766.76,
+            "okei_code": "",
+            "purchaseAmount": 385.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 18.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": 13346.532000000003,
+            "okei_code": "",
+            "purchaseAmount": 18.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 39.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": 50821.056,
+            "okei_code": "",
+            "purchaseAmount": 39.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 2.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": 995.04,
+            "okei_code": "",
+            "purchaseAmount": 2.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        },
+        {
+            "DeliverySchedule": {
+                "dates": {
+                    "end_date": "31-03-2023",
+                    "start_date": "01-01-2023"
+                },
+                "deliveryAmount": 783.0,
+                "deliveryConditions": "",
+                "year": 2023
+            },
+            "address": {
+                "gar_id": "",
+                "text": ""
+            },
+            "entityId": "-",
+            "id": "-",
+            "nmc": 259850.35008000003,
+            "okei_code": "",
+            "purchaseAmount": 783.0,
+            "spgzCharacteristics": [
+                {
+                    "characteristicName": "-",
+                    "characteristicSpgzEnums": [
+                        {
+                            "value": "-"
+                        }
+                    ],
+                    "conditionTypeId": 0,
+                    "kpgzCharacteristicId": "-",
+                    "okei_id": 0,
+                    "selectType": 0,
+                    "typeId": 0,
+                    "value1": 0,
+                    "value2": 0
+                }
+            ]
+        }
+    ]
+}
