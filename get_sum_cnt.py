@@ -6,14 +6,22 @@ import numpy as np
 
 import psycopg2
 
-def exponential_smoothing(series, alpha):
-    result = [series[0]] 
-    
-    for n in range(1, len(series)):
-        result.append(alpha * series[n] + (1 - alpha) * result[n-1])
-    return result[-1]
+def double_exponential_smoothing(series, alpha, beta, horizon = 1):
+    h = horizon - 1
+    result = [series[0]]
+    for n in range(1, len(series) + h):
+        if n == 1:
+            level, trend = series[0], series[1] - series[0]
+        if n >= len(series): # прогнозируем
+            value = result[-1]
+        else:
+            value = series[n]
+        last_level, level = level, alpha*value + (1-alpha)*(level+trend)
+        trend = beta*(level-last_level) + (1-beta)*trend
+        result.append(level+trend)
+    return result[-horizon:]
 
-def get_cnt_sum(product: str):
+def get_cnt_sum(product: str, period: int = 1):
     try:
         db_config = {
             'user': 'user1',
@@ -25,12 +33,12 @@ def get_cnt_sum(product: str):
         connection_string = f"postgresql+psycopg2://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
 
         conn = create_engine(connection_string)
-        query = f"""select * from financial_data where "Счет" = '{product}' and "Обороты за период (Сумма Дебет)" is not NULL and "Сальдо на начало периода (Сумма Дебет)" is not NULL """
+        query = f"""select * from financial_data where "Счет" = '{product}' and "Обороты за период (Сумма Дебет)" is not NULL"""
         data = pd.read_sql(query, conn)
         data = data[data['Код'].isnull() != True]
         data = data.fillna(0)
 
-        if len(data) <= 2:
+        if len(data) <= 1:
             return -2, -2
 
         data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
@@ -45,9 +53,12 @@ def get_cnt_sum(product: str):
         for ind, row in data.iterrows():
             bought_sum[row['Квартал']] = row['used_sum']
     #     bought_sum
-
-        cnt_to_buy = exponential_smoothing(np.asarray(list(bought_cnt.values())), 0.6)
-        sum_to_buy = exponential_smoothing(np.asarray(list(bought_sum.values())), 0.6)
+        
+        history_cnt = np.asarray(list(bought_cnt.values()))
+        history_sum = np.asarray(list(bought_sum.values()))
+        
+        cnt_to_buy= double_exponential_smoothing(history_cnt, 0.6, 0.4, period)
+        sum_to_buy = double_exponential_smoothing(history_sum, 0.6, 0.4, period)
 
         return cnt_to_buy, sum_to_buy
     except Exception as e:
@@ -56,7 +67,7 @@ def get_cnt_sum(product: str):
     
 # def main():
 #     args = sys.argv[1:]
-#     print(get_cnt_sum(args[0]))
+#     print(get_cnt_sum(args[0], int(args[1])))
 
 # if __name__ == '__main__':
 #     main()
