@@ -101,7 +101,7 @@ class TelegramBot:
             await update.message.reply_text('Авторизация успешна! Теперь вам доступны все команды. Используйте /info для получения списка команд.')
         except Exception as e:
             logging.error(f"Failed to get Keycloak token: {str(e)}")
-            del self.pending_auth[update.message.from_user.id]
+            del self.pending_auth[user_id]
             await update.message.reply_text(f"Авторизация не удалась: {str(e)}. Попробуйте снова с помощью команды /login.")
 
     async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -133,6 +133,10 @@ class TelegramBot:
             return
 
         webapp_url = os.getenv('WEBAPP_URL')
+        if not webapp_url:
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
+            return
+
         if not webapp_url.startswith("https://"):
             await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
             return
@@ -144,11 +148,11 @@ class TelegramBot:
             )
         )
 
-    async def product_selected(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        data = context.args[0]
+
+    async def product_selected(self, data):
         user_id = data.get('user_id')
         product_name = data.get('product_name')
-        
+
         import analytics
         try:
             chart_path = analytics.generate_inventory_for_product(product_name)
@@ -156,6 +160,8 @@ class TelegramBot:
         except Exception as e:
             logging.error(f"Failed to generate inventory chart: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
+
+
 
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
@@ -175,9 +181,9 @@ if __name__ == "__main__":
 
     bot = TelegramBot(config)
 
-    # Запуск Flask в отдельном потоке
+    # Запуск Flask в отдельном потоке и передача объекта bot
     from webapp import WebApp
-    web_app = WebApp()
+    web_app = WebApp(bot)  # Передаем объект bot
     flask_thread = threading.Thread(target=web_app.run)
     flask_thread.start()
 
