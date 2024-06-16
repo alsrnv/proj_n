@@ -52,8 +52,6 @@ class TelegramBot:
             '/edit_json - Изменить json'
         )
 
-    
-
     async def edit_json(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /edit_json command.")
         if not self.is_user_authorized(update):
@@ -216,17 +214,28 @@ class TelegramBot:
         final_answer['rows'] = []
         for product_name in products:
             cnt_to_buy, sum_to_buy = analytics.get_cnt_sum(product_name, engine)
-            final_answer['rows'].append(analytics.make_one_row(product_name,            cnt_to_buy, sum_to_buy, engine))
+            final_answer['rows'].append(analytics.make_one_row(product_name, cnt_to_buy, sum_to_buy, engine))
 
         tmp_json_filename = 'final_answer.json'
-        with open(tmp_json_filename, 'w', encoding='utf-8') as json_file:
-            json.dump(final_answer, json_file, ensure_ascii=False, indent=4)
+        try:
+            with open(tmp_json_filename, 'w', encoding='utf-8') as json_file:
+                json.dump(final_answer, json_file, ensure_ascii=False, indent=4)
+                logging.debug(f"JSON file created: {tmp_json_filename}")
 
-        # Отправим JSON файл через Telegram-бота
-        with open(tmp_json_filename, 'rb') as json_file:
-            await context.bot.send_document(chat_id=update.message.chat_id, document=json_file)
+            # Проверка наличия файла
+            if not os.path.exists(tmp_json_filename):
+                logging.error(f"File not found: {tmp_json_filename}")
+                await update.message.reply_text(f"Ошибка: файл {tmp_json_filename} не найден.")
+                return
 
-        os.remove(tmp_json_filename)
+            # Отправим JSON файл через Telegram-бота
+            with open(tmp_json_filename, 'rb') as json_file:
+                await context.bot.send_document(chat_id=update.message.chat_id, document=json_file)
+
+            os.remove(tmp_json_filename)
+        except Exception as e:
+            logging.error(f"Error while creating or sending JSON file: {str(e)}")
+            await update.message.reply_text(f"Ошибка при создании или отправке JSON файла: {str(e)}")
 
         self.counter += 1
 
