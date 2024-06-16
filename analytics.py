@@ -183,19 +183,31 @@ def make_contracts(product_name, engine):
     return pd.read_sql(query, engine).iloc[0].to_dict()
 
 
+def make_financial_data(product_name, engine):
+    query = f"""SELECT *
+            FROM financial_data
+            where "Счет" = '{product_name}'
+            limit 1
+            """
+    return pd.read_sql(query, engine).iloc[0].to_dict()
+
+
 def make_one_row(product_name, cnt_to_buy, sum_to_buy, engine):
     product_kpgz_spgz_ste = make_kpgz_spgz_ste(product_name, engine)
     product_contracts = make_contracts(product_name, engine)
+    product_financial = make_financial_data(product_name, engine)
 
     one_row = {}
     one_row["DeliverySchedule"] = {  # График поставки
         "dates": {
-            "end_date": "",  # Дата окончания поставки – данные рождаются в процессе прогнозирования
-            "start_date": ""  # Дата начала поставки– данные рождаются в процессе прогнозирования
+            "end_date": day_of_quarter(1, 'last', str(product_financial['Год'] + 1)),
+            # Дата окончания поставки – данные рождаются в процессе прогнозирования
+            "start_date": day_of_quarter(1, 'first', str(product_financial['Год'] + 1))
+            # Дата начала поставки– данные рождаются в процессе прогнозирования
         },
         "deliveryAmount": cnt_to_buy,  # Объем поставки– данные рождаются в процессе прогнозирования
         "deliveryConditions": "",  # Условия поставки– данные рождаются в процессе прогнозирования
-        "year": 0  # Год– данные рождаются в процессе прогнозирования
+        "year": product_financial['Год'] + 1  # Год– данные рождаются в процессе прогнозирования
     }
     one_row["address"] = {  # Адрес поставки– данные рождаются в процессе прогнозирования
         "gar_id": "",  # Идентификатор ГАР – это федеральный справочник адресов
@@ -247,7 +259,7 @@ def exponential_smoothing(series, alpha):
 
 def get_cnt_sum(product_name: str, engine):
     try:
-        query = f"""select * from financial_data where "Счет" = '{product_name}' and "Обороты за период (Сумма Дебет)" is not NULL and "Сальдо на начало периода (Сумма Дебет)" is not NULL """
+        query = f"""select * from financial_data where "Счет" = '{product_name}' and "Обороты за период (Сумма Дебет)" is not NULL"""  # and "Сальдо на начало периода (Сумма Дебет)" is not NULL
         data = pd.read_sql(query, engine)
         data = data[data['Код'].isnull() != True]
         data = data.fillna(0)
@@ -271,7 +283,7 @@ def get_cnt_sum(product_name: str, engine):
         cnt_to_buy = exponential_smoothing(np.asarray(list(bought_cnt.values())), 0.6)
         sum_to_buy = exponential_smoothing(np.asarray(list(bought_sum.values())), 0.6)
 
-        return cnt_to_buy, sum_to_buy
+        return int(np.ceil(cnt_to_buy)), int(np.ceil(sum_to_buy))
     except Exception as e:
         print(e)
         return -1, -1
