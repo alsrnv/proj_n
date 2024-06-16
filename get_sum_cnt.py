@@ -30,7 +30,7 @@ def get_cnt_sum(product: str):
         data = data[data['Код'].isnull() != True]
         data = data.fillna(0)
 
-        if len(data) <= 1:
+        if len(data) <= 2:
             return -2, -2
 
         data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
