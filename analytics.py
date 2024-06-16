@@ -185,7 +185,12 @@ def generate_inventory_chart(data, product_name):
     colors = ['red', 'orange', 'yellow', 'green']
 
     # Определение цвета для каждого значения в данных
-    color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
+    #color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
+
+    if max(data.values()) == 0:
+        color_scale = ['gray' for _ in data.values()]
+    else:
+        color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
 
     fig = make_subplots(rows=1, cols=len(data), shared_yaxes=True,
                         subplot_titles=list(data.keys()))

@@ -1,7 +1,7 @@
 {
-    "id": 1,
+    "CustomerId": "6995969877",
+    "id": 3,
     "lotEntityId": 0,
-    "CustomerId": "106876290",
     "rows": [
         {
             "DeliverySchedule": {
@@ -9,7 +9,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 2.0,
+                "deliveryAmount": 4,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -21,7 +21,7 @@
             "id": null,
             "nmc": 59873.29248,
             "okei_code": "",
-            "purchaseAmount": 2.0,
+            "purchaseAmount": 2,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Установка информационной наклейки, м2",
@@ -46,7 +46,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 1.0,
+                "deliveryAmount": 1,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -58,7 +58,7 @@
             "id": null,
             "nmc": 551.6280000000004,
             "okei_code": "",
-            "purchaseAmount": 1.0,
+            "purchaseAmount": 1,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Изготовление визитной карточки, 2+0, тираж от 100 до 500шт",
@@ -83,7 +83,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 463.0,
+                "deliveryAmount": 463,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -95,7 +95,7 @@
             "id": null,
             "nmc": 119279.10240000002,
             "okei_code": "",
-            "purchaseAmount": 463.0,
+            "purchaseAmount": 463,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Вода питьевая упакованная",
@@ -120,7 +120,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 385.0,
+                "deliveryAmount": 385,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -132,7 +132,7 @@
             "id": null,
             "nmc": 205766.76,
             "okei_code": "",
-            "purchaseAmount": 385.0,
+            "purchaseAmount": 385,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Вода питьевая, высшей категории, негазированная  объемом 0.33 л.",
@@ -157,7 +157,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 18.0,
+                "deliveryAmount": 18,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -169,7 +169,7 @@
             "id": null,
             "nmc": 13346.532000000003,
             "okei_code": "",
-            "purchaseAmount": 18.0,
+            "purchaseAmount": 18,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Изготовление визитной карточки",
@@ -194,7 +194,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 39.0,
+                "deliveryAmount": 39,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -206,7 +206,7 @@
             "id": null,
             "nmc": 50821.056,
             "okei_code": "",
-            "purchaseAmount": 39.0,
+            "purchaseAmount": 39,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Карта бесконтактная, пластиковая, 125кГц, 64 бит",
@@ -231,7 +231,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 2.0,
+                "deliveryAmount": 2,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -243,7 +243,7 @@
             "id": null,
             "nmc": 995.04,
             "okei_code": "",
-            "purchaseAmount": 2.0,
+            "purchaseAmount": 2,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Печать журнала",
@@ -268,7 +268,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 783.0,
+                "deliveryAmount": 783,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -280,7 +280,7 @@
             "id": null,
             "nmc": 259850.35008000003,
             "okei_code": "",
-            "purchaseAmount": 783.0,
+            "purchaseAmount": 783,
             "spgzCharacteristics": [
                 {
                     "characteristicName": "Подвеска крепления штанги для гардеробных конструкций Elfa Classic, металл,цвет белый, высота 75мм, ширина 35 мм, глубина 40мм, d 25мм",
