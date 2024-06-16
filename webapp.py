@@ -3,10 +3,8 @@ import os
 import logging
 import requests
 import asyncio
-import pandas as pd
-import plotly.express as px
-import io
-from telegram import Bot
+import json
+import analytics
 
 class WebApp:
     def __init__(self, bot):
@@ -29,7 +27,6 @@ class WebApp:
         @self.app.route('/get_products')
         def get_products():
             logging.debug("Serving product list")
-            import analytics
             products = analytics.get_unique_products()
             return jsonify({'products': products})
 
@@ -44,32 +41,14 @@ class WebApp:
                 logging.error("Missing user_id or product_name")
                 return jsonify({'success': False, 'error': 'Missing user_id or product_name'}), 400
 
-            import analytics
-            engine = analytics.get_database_connection()
-            product_data = analytics.history_remains_for_product(product_name, engine)
-
-            if not product_data:
-                return jsonify({'error': 'Нет данных для продукта'}), 400
-
-            fig = px.line(x=list(product_data.keys()), y=list(product_data.values()), title=f'Остатки для продукта {product_name}')
-            fig.update_layout(
-                xaxis_title='Дата',
-                yaxis_title='Остаток',
-                template='plotly_white'
-            )
-
-            # Сохранение графика как изображение для отправки в Telegram
-            img_bytes = io.BytesIO()
-            fig.write_image(img_bytes, format='png')
-            img_bytes.seek(0)
-
-            # Отправка изображения графика в Telegram
-            bot = Bot(token=os.getenv('TELEGRAM_TOKEN'))
-            bot.send_photo(chat_id=user_id, photo=img_bytes)
-
-            # Возврат данных для отображения интерактивного графика
-            graph_json = fig.to_json()
-            return jsonify({'graph_json': graph_json, 'success': True})
+            # Генерация графика
+            try:
+                chart_path, graph_json = analytics.generate_inventory_for_product(product_name)
+                asyncio.run(self.bot.product_selected({'user_id': user_id, 'product_name': product_name, 'chart_path': chart_path}))
+                return jsonify({'success': True, 'graph_json': graph_json, 'values': analytics.history_remains_for_product(product_name, analytics.get_database_connection())}), 200
+            except Exception as e:
+                logging.error(f"Exception while generating graph: {str(e)}")
+                return jsonify({'success': False, 'error': str(e)}), 500
 
     def run(self):
         logging.debug("Starting Flask server.")

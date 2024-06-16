@@ -1,8 +1,9 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, BotCommand
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from keycloak import KeycloakOpenID
 import os
 import logging
+import analytics
 import asyncio
 
 logging.basicConfig(level=logging.DEBUG)
@@ -24,19 +25,6 @@ class TelegramBot:
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
         logging.debug("TelegramBot initialized with config and handlers added.")
-
-        self.set_commands()
-
-    def set_commands(self):
-        commands = [
-            BotCommand(command="start", description="Начать диалог"),
-            BotCommand(command="info", description="Информация о командах"),
-            BotCommand(command="inventory", description="Показать складские остатки"),
-            BotCommand(command="stats", description="Показать статистику"),
-            BotCommand(command="login", description="Авторизация через Keycloak"),
-            BotCommand(command="product", description="Выбор продукта для отображения складских остатков")
-        ]
-        self.application.bot.set_my_commands(commands)
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /start command.")
@@ -82,10 +70,12 @@ class TelegramBot:
             elif stage == 'product_name':
                 product_name = update.message.text
                 logging.debug(f"Received product name: {product_name}")
-                import analytics
                 try:
-                    chart_path = await self.generate_inventory_chart(product_name)
+                    chart_path, graph_json = analytics.generate_inventory_for_product(product_name)
                     await update.message.reply_photo(photo=open(chart_path, 'rb'))
+                    values = analytics.history_remains_for_product(product_name, analytics.get_database_connection())
+                    values_text = "\n".join([f"{date}: {value}" for date, value in values.items()])
+                    await update.message.reply_text(f"Остатки для продукта {product_name}:\n{values_text}")
                 except Exception as e:
                     logging.error(f"Failed to generate inventory chart: {str(e)}")
                     await update.message.reply_text(f"Ошибка при генерации графика для продукта: {str(e)}")
@@ -124,7 +114,6 @@ class TelegramBot:
             await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return
 
-        import analytics
         data = {'Товар': ['Товар1', 'Товар2'], 'Количество': [10, 20]}
         chart_path = analytics.generate_inventory_chart(data, 'Sample Product')
         await update.message.reply_photo(photo=open(chart_path, 'rb'))
@@ -135,7 +124,6 @@ class TelegramBot:
             await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return
 
-        import analytics
         data = {'Дата': ['2024-01-01', '2024-02-01'], 'Значение': [100, 200]}
         chart_path = analytics.generate_stats_chart(data)
         await update.message.reply_photo(photo=open(chart_path, 'rb'))
@@ -165,11 +153,14 @@ class TelegramBot:
     async def product_selected(self, data):
         user_id = data.get('user_id')
         product_name = data.get('product_name')
+        chart_path = data.get('chart_path')
 
-        import analytics
         try:
-            chart_path = await self.generate_inventory_chart(product_name)
+            # Отправка графика и текста с остатками в Telegram чат
             await self.application.bot.send_photo(chat_id=user_id, photo=open(chart_path, 'rb'))
+            values = analytics.history_remains_for_product(product_name, analytics.get_database_connection())
+            values_text = "\n".join([f"{date}: {value}" for date, value in values.items()])
+            await self.application.bot.send_message(chat_id=user_id, text=f"Остатки для продукта {product_name}:\n{values_text}")
         except ValueError as e:
             logging.error(f"No data for product: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Нет данных для продукта: {str(e)}")
@@ -179,11 +170,6 @@ class TelegramBot:
         except Exception as e:
             logging.error(f"Failed to generate inventory chart: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
-
-    async def generate_inventory_chart(self, product_name):
-        import analytics
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, analytics.generate_inventory_for_product, product_name)
 
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
@@ -210,3 +196,4 @@ if __name__ == "__main__":
     flask_thread.start()
 
     bot.run()
+

@@ -5,12 +5,10 @@ import plotly.express as px
 import tempfile
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
-from plotly.subplots import make_subplots
-import plotly.express as px
+import plotly
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
-
+import json
 
 def day_of_quarter(quarter, day_type, year='2022'):
     quarter = int(quarter)
@@ -57,8 +55,6 @@ def history_remains_for_product(product_name, engine):
                 values[day_of_quarter(num_quarter, 'last')] = int(num_at_end.sum())
 
     return values
-
-
 
 def make_kpgz_spgz_ste(product_name, engine):
     query = f"""
@@ -145,7 +141,6 @@ def generate_inventory_chart(data, product_name):
 
     return tmp_file_path
 
-
 def generate_inventory_for_product(product_name):
     engine = get_database_connection()
 
@@ -153,33 +148,19 @@ def generate_inventory_for_product(product_name):
     if not values:
         raise ValueError(f"Нет данных для продукта: {product_name}")
 
-    # Построение графика с использованием Plotly
-    colors = ['red', 'orange', 'yellow', 'green']
+    # Генерация бар-чарта с использованием Plotly
+    dates = list(values.keys())
+    quantities = list(values.values())
+    
+    fig = go.Figure([go.Bar(x=dates, y=quantities)])
+    fig.update_layout(title=f"Остатки для продукта {product_name}",
+                      xaxis_title="Дата",
+                      yaxis_title="Остаток")
 
-    # Определение цвета для каждого значения в данных
-    color_scale = [colors[int(value / max(values.values()) * (len(colors) - 1))] for value in values.values()]
+    graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
-    fig = make_subplots(rows=1, cols=len(values), shared_yaxes=True,
-                        subplot_titles=list(values.keys()))
-
-    # Добавляем каждый график в соответствующий подграфик с указанием цвета
-    for i, (date, value) in enumerate(values.items(), start=1):
-        fig.add_trace(go.Bar(x=[date], y=[value], name=date, showlegend=False, marker=dict(color=color_scale[i - 1])),
-                      row=1, col=i)
-
-    # Обновляем макет для лучшей читаемости и добавляем подпись оси Y только к первому подграфику
-    fig.update_yaxes(title_text="Количество", row=1, col=1)
-    fig.update_xaxes(showticklabels=False)  # Убираем подписи на оси X
-
-    # Обновляем общие параметры макета
-    fig.update_layout(
-        height=400,
-        width=800,
-        title_text=f"Остаток {product_name}",
-        title_x=0.5  # Центрируем заголовок
-    )
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
         fig.write_image(tmp_file.name)
     tmp_file_path = tmp_file.name
 
-    return tmp_file_path
+    return tmp_file_path, graph_json
