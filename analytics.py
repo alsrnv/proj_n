@@ -5,6 +5,12 @@ import plotly.express as px
 import tempfile
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+from plotly.subplots import make_subplots
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
 
 def day_of_quarter(quarter, day_type, year='2022'):
     quarter = int(quarter)
@@ -24,7 +30,6 @@ def day_of_quarter(quarter, day_type, year='2022'):
             last_day = first_day_of_next_month - timedelta(days=1)
         return last_day.strftime('%d-%m-%Y')
 
-
 def get_database_connection():
     db_url = os.getenv('DATABASE_URL')
     engine = create_engine(db_url)
@@ -32,47 +37,28 @@ def get_database_connection():
 
 def history_remains_for_product(product_name, engine):
     values = {}
-    for num_quater in range(1, 5):
-        query = f'''select "Счет", "Сальдо на начало периода (Кол-во Де", "Сальдо на конец периода (Кол-во Деб", "Квартал"
-                    from financial_data
-                    where "Код" is not NULL
-                    and "Счет" = '{product_name}'
-                    and "Квартал" = '{num_quater}'
+    for num_quarter in range(1, 5):
+        query = f'''SELECT "Счет", "Сальдо на начало периода (Кол-во Де", "Сальдо на конец периода (Кол-во Деб", "Квартал"
+                    FROM financial_data
+                    WHERE "Код" IS NOT NULL
+                    AND "Счет" = '{product_name}'
+                    AND "Квартал" = '{num_quarter}'
                 '''
         num_at_beginning = pd.read_sql(query, engine).fillna(0)['Сальдо на начало периода (Кол-во Де']
         if len(num_at_beginning) == 0:
-            values[day_of_quarter(num_quater, 'first')] = 0
+            values[day_of_quarter(num_quarter, 'first')] = 0
         else:
-            values[day_of_quarter(num_quater, 'first')] = int(num_at_beginning.sum())
-        if num_quater == 4:
+            values[day_of_quarter(num_quarter, 'first')] = int(num_at_beginning.sum())
+        if num_quarter == 4:
             num_at_end = pd.read_sql(query, engine).fillna(0)['Сальдо на конец периода (Кол-во Деб']
             if len(num_at_end) == 0:
-                values[day_of_quarter(num_quater, 'last')] = 0
+                values[day_of_quarter(num_quarter, 'last')] = 0
             else:
-                values[day_of_quarter(num_quater, 'last')] = int(num_at_end.sum())
+                values[day_of_quarter(num_quarter, 'last')] = int(num_at_end.sum())
 
     return values
 
-def generate_inventory_for_product(product_name):
-    engine = get_database_connection()
 
-    values = history_remains_for_product(product_name, engine)
-    if not values:
-        raise ValueError(f"Нет данных для продукта: {product_name}")
-
-    # Построение графика с использованием Plotly
-    fig = px.line(x=list(values.keys()), y=list(values.values()), title=f'Остатки для продукта {product_name}')
-    fig.update_layout(
-        xaxis_title='Дата',
-        yaxis_title='Остаток',
-        template='plotly_white'
-    )
-
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-        fig.write_image(tmp_file.name)
-    tmp_file_path = tmp_file.name
-
-    return tmp_file_path
 
 def make_kpgz_spgz_ste(product_name, engine):
     query = f"""
@@ -129,5 +115,71 @@ def generate_stats_chart(stats_data):
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
         plt.savefig(tmp_file.name)
         tmp_file_path = tmp_file.name
+
+    return tmp_file_path
+
+def generate_inventory_chart(data, product_name):
+    """
+    Generates a bar chart for inventory data.
+    
+    Parameters:
+        data (dict): Dictionary with dates as keys and inventory levels as values.
+        product_name(str): Name of the product.
+    
+    Returns:
+        str: Path to the saved chart image.
+    """
+    dates = list(data.keys())
+    values = list(data.values())
+
+    fig = px.bar(x=dates, y=values, title=f'Остатки для продукта {product_name}', labels={'x': 'Дата', 'y': 'Остаток'})
+    fig.update_layout(
+        xaxis_title='Дата',
+        yaxis_title='Остаток',
+        template='plotly_white'
+    )
+
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+        fig.write_image(tmp_file.name)
+    tmp_file_path = tmp_file.name
+
+    return tmp_file_path
+
+
+def generate_inventory_for_product(product_name):
+    engine = get_database_connection()
+
+    values = history_remains_for_product(product_name, engine)
+    if not values:
+        raise ValueError(f"Нет данных для продукта: {product_name}")
+
+    # Построение графика с использованием Plotly
+    colors = ['red', 'orange', 'yellow', 'green']
+
+    # Определение цвета для каждого значения в данных
+    color_scale = [colors[int(value / max(values.values()) * (len(colors) - 1))] for value in values.values()]
+
+    fig = make_subplots(rows=1, cols=len(values), shared_yaxes=True,
+                        subplot_titles=list(values.keys()))
+
+    # Добавляем каждый график в соответствующий подграфик с указанием цвета
+    for i, (date, value) in enumerate(values.items(), start=1):
+        fig.add_trace(go.Bar(x=[date], y=[value], name=date, showlegend=False, marker=dict(color=color_scale[i - 1])),
+                      row=1, col=i)
+
+    # Обновляем макет для лучшей читаемости и добавляем подпись оси Y только к первому подграфику
+    fig.update_yaxes(title_text="Количество", row=1, col=1)
+    fig.update_xaxes(showticklabels=False)  # Убираем подписи на оси X
+
+    # Обновляем общие параметры макета
+    fig.update_layout(
+        height=400,
+        width=800,
+        title_text=f"Остаток {product_name}",
+        title_x=0.5  # Центрируем заголовок
+    )
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+        fig.write_image(tmp_file.name)
+    tmp_file_path = tmp_file.name
 
     return tmp_file_path

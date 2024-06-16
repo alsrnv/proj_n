@@ -97,7 +97,7 @@ class TelegramBot:
                 grant_type='password'
             )
             self.authorized_users[update.message.from_user.id] = True
-            del self.pending_auth[user_id]
+            del self.pending_auth[update.message.from_user.id]
             await update.message.reply_text('Авторизация успешна! Теперь вам доступны все команды. Используйте /info для получения списка команд.')
         except Exception as e:
             logging.error(f"Failed to get Keycloak token: {str(e)}")
@@ -112,7 +112,7 @@ class TelegramBot:
 
         import analytics
         data = {'Товар': ['Товар1', 'Товар2'], 'Количество': [10, 20]}
-        chart_path = analytics.generate_inventory_chart(data)
+        chart_path = analytics.generate_inventory_chart(data, 'Sample Product')
         await update.message.reply_photo(photo=open(chart_path, 'rb'))
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -191,4 +191,3 @@ if __name__ == "__main__":
     flask_thread.start()
 
     bot.run()
-
