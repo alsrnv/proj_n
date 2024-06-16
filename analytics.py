@@ -10,6 +10,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import json
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+
+
+
 
 def day_of_quarter(quarter, day_type, year='2022'):
     quarter = int(quarter)
@@ -57,11 +63,40 @@ def history_remains_for_product(product_name, engine):
 
     return values
 
+
+def return_best_match(product_name, lst_titles):
+    """
+    Функция для нахождения наиболее похожего названия товара.
+    Args:
+        product_name: исходное название товара.
+        lst_titles: список названий товаров для сравнения.
+
+    Returns: best_match: Наиболее похожее название товара.
+
+    """
+    # Преобразование текста в TF-IDF векторы
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(lst_titles + [product_name])
+
+    # Вычисление косинусного сходства
+    cosine_sim = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1])
+
+    # Нахождение наиболее похожего названия
+    best_match_index = cosine_sim.argmax()
+    best_match = lst_titles[best_match_index]
+    return best_match
+
 def make_kpgz_spgz_ste(product_name, engine):
+    query = f"""SELECT distinct("Название СТЕ")
+    FROM reference_data
+    """
+    # Список названий и текстовое название для сравнения
+    titles_in_reference_data = pd.read_sql(query, engine)["Название СТЕ"].tolist()
+    reference_data_title = return_best_match(product_name, titles_in_reference_data)
     query = f"""
     SELECT *
     FROM reference_data
-    WHERE "Название СТЕ" ILIKE '%%{product_name}%%'
+    WHERE "Название СТЕ" = '{reference_data_title}'
     LIMIT 1
     """
     result = pd.read_sql(query, engine)
@@ -73,10 +108,17 @@ def make_kpgz_spgz_ste(product_name, engine):
     return result.iloc[0].to_dict()
 
 def make_contracts(product_name, engine):
+    query = f"""SELECT distinct("Название СТЕ")
+    FROM reference_data
+    """
+    # Список названий и текстовое название для сравнения
+    titles_in_reference_data = pd.read_sql(query, engine)["Название СТЕ"].tolist()
+    reference_data_title = return_best_match(product_name, titles_in_reference_data)
+
     query = f"""
     SELECT *
     FROM contracts
-    WHERE "Наименование СПГЗ" ILIKE '%%{product_name}%%'
+    WHERE "Наименование СПГЗ" = '{reference_data_title}'
     LIMIT 1
     """
     result = pd.read_sql(query, engine)

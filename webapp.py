@@ -73,6 +73,18 @@ class WebApp:
                 logging.error(f"Failed to load JSON: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
 
+        # @self.app.route('/update_json', methods=['POST'])
+        # def update_json():
+        #     data = request.json
+        #     logging.debug(f"Received JSON update: {data}")
+        #     try:
+        #         with open('final_answer.json', 'w', encoding='utf-8') as json_file:
+        #             json.dump(data, json_file, ensure_ascii=False, indent=4)
+        #         return jsonify({'success': True}), 200
+        #     except Exception as e:
+        #         logging.error(f"Failed to update JSON: {str(e)}")
+        #         return jsonify({'success': False, 'error': str(e)}), 500
+
         @self.app.route('/update_json', methods=['POST'])
         def update_json():
             data = request.json
@@ -80,10 +92,13 @@ class WebApp:
             try:
                 with open('final_answer.json', 'w', encoding='utf-8') as json_file:
                     json.dump(data, json_file, ensure_ascii=False, indent=4)
+                
+                asyncio.run(self.bot.send_json_file(chat_id=data['CustomerId'], context=self.bot.application))
                 return jsonify({'success': True}), 200
             except Exception as e:
                 logging.error(f"Failed to update JSON: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
+
 
     def run(self):
         logging.debug("Starting Flask server.")

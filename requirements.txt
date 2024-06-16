@@ -14,3 +14,4 @@ plotly
 numpy
 psycopg2-binary
 kaleido
+scikit-learn

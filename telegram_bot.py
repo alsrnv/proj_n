@@ -239,6 +239,18 @@ class TelegramBot:
 
         self.counter += 1
 
+    async def send_json_file(self, chat_id, context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            tmp_json_filename = 'final_answer.json'
+            if os.path.exists(tmp_json_filename):
+                with open(tmp_json_filename, 'rb') as json_file:
+                    await context.bot.send_document(chat_id=chat_id, document=json_file)
+            else:
+                logging.error(f"File not found: {tmp_json_filename}")
+        except Exception as e:
+            logging.error(f"Error while sending JSON file: {str(e)}")
+
+
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
         return self.authorized_users.get(user_id, False)
