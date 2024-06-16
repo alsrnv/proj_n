@@ -9,3 +9,4 @@ kaleido
 pandas
 sqlalchemy
 psycopg2
+scikit-learn

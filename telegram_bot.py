@@ -10,7 +10,8 @@ import subprocess
 import tempfile
 from sqlalchemy import create_engine
 
-from analytics import generate_inventory_chart, generate_stats_chart, history_remains_for_product, make_one_row
+from analytics import generate_inventory_chart, generate_stats_chart, history_remains_for_product, make_one_row, \
+    get_cnt_sum, all_regular_product_names
 
 START_ROUTES, END_ROUTES = range(2)
 
@@ -106,7 +107,7 @@ class TelegramBot:
                 disable_web_page_preview=True
             )
             return
-        products = {'вода питьевая "МИЯ" 0,33 л. 24 бут/упак.': 10}
+        products = all_regular_product_names(self.engine)
 
         final_answer = {}
 
@@ -114,8 +115,9 @@ class TelegramBot:
         final_answer['lotEntityId'] = 0  # не надо
         final_answer['CustomerId'] = str(update.message.from_user.id)  # telegram id кто писал
         final_answer['rows'] = []
-        for product_name, prediction_num in products.items():
-            final_answer['rows'].append(make_one_row(product_name, prediction_num, self.engine))
+        for product_name in products:
+            cnt_to_buy, sum_to_buy = get_cnt_sum(product_name, self.engine)
+            final_answer['rows'].append(make_one_row(product_name, cnt_to_buy, sum_to_buy, self.engine))
 
         tmp_json_filename = 'final_answer.json'
         with open(tmp_json_filename, 'w', encoding='utf-8') as json_file:

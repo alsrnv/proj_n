@@ -9,6 +9,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
 
 def day_of_quarter(quarter, day_type, year='2022'):
     """
@@ -123,41 +126,74 @@ def all_distinct_products(engine):
     return pd.read_sql(query, engine)['Счет'].to_list()
 
 
+def return_best_match(product_name, lst_titles):
+    """
+    Функция для нахождения наиболее похожего названия товара.
+    Args:
+        product_name: исходное название товара.
+        lst_titles: список названий товаров для сравнения.
+
+    Returns: best_match: Наиболее похожее название товара.
+
+    """
+    # Преобразование текста в TF-IDF векторы
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(lst_titles + [product_name])
+
+    # Вычисление косинусного сходства
+    cosine_sim = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1])
+
+    # Нахождение наиболее похожего названия
+    best_match_index = cosine_sim.argmax()
+    best_match = lst_titles[best_match_index]
+    return best_match
+
+
 def make_kpgz_spgz_ste(product_name, engine):
+    query = f"""SELECT distinct("Название СТЕ")
+    FROM reference_data
+    """
+    # Список названий и текстовое название для сравнения
+    titles_in_reference_data = pd.read_sql(query, engine)["Название СТЕ"].tolist()
+    reference_data_title = return_best_match(product_name, titles_in_reference_data)
     query = f"""SELECT *
     FROM reference_data
-    WHERE "Название СТЕ" ilike '%%{product_name}%%' 
-    limit 1"""
+    WHERE "Название СТЕ" = '{reference_data_title}'
+    LIMIT 1
+    """
+    # return pd.read_csv('kpgz_spgz_ste.csv').iloc[0].to_dict()
 
-    return pd.read_csv('kpgz_spgz_ste.csv').iloc[0].to_dict()
-
-    return pd.read_sql(query, engine)
+    return pd.read_sql(query, engine).iloc[0].to_dict()
 
 
 def make_contracts(product_name, engine):
+    query = f"""SELECT distinct("Наименование СПГЗ")
+        FROM contracts
+        """
+    # Список названий и текстовое название для сравнения
+    titles_in_contracts = pd.read_sql(query, engine)["Наименование СПГЗ"].tolist()
+    contracts_title = return_best_match(product_name, titles_in_contracts)
     query = f"""SELECT *
-    FROM contracts
-    WHERE "Наименование СПГЗ" ilike '%%{product_name}%%' 
-    limit 1"""
+            FROM contracts
+            where "Наименование СПГЗ" = '{contracts_title}'
+            limit 1
+            """
+    # return pd.read_csv('kpgz_spgz_ste.csv').iloc[0].to_dict()
 
-    return pd.read_csv('contracts.csv').iloc[0].to_dict()
-
-    return pd.read_sql(query, engine)
+    return pd.read_sql(query, engine).iloc[0].to_dict()
 
 
-def make_one_row(product_name, prediction_num, engine):
+def make_one_row(product_name, cnt_to_buy, sum_to_buy, engine):
     product_kpgz_spgz_ste = make_kpgz_spgz_ste(product_name, engine)
     product_contracts = make_contracts(product_name, engine)
 
-    one_row = {
-
-    }
+    one_row = {}
     one_row["DeliverySchedule"] = {  # График поставки
         "dates": {
             "end_date": "",  # Дата окончания поставки – данные рождаются в процессе прогнозирования
             "start_date": ""  # Дата начала поставки– данные рождаются в процессе прогнозирования
         },
-        "deliveryAmount": prediction_num,  # Объем поставки– данные рождаются в процессе прогнозирования
+        "deliveryAmount": cnt_to_buy,  # Объем поставки– данные рождаются в процессе прогнозирования
         "deliveryConditions": "",  # Условия поставки– данные рождаются в процессе прогнозирования
         "year": 0  # Год– данные рождаются в процессе прогнозирования
     }
@@ -168,9 +204,9 @@ def make_one_row(product_name, prediction_num, engine):
 
     one_row['entityId'] = product_kpgz_spgz_ste['СПГЗ']
     one_row['id'] = product_kpgz_spgz_ste['СПГЗ код']
-    one_row['nmc'] = 0  # сумма
+    one_row['nmc'] = sum_to_buy  # сумма
     one_row['okei_code'] = ''
-    one_row['purchaseAmount'] = prediction_num  # Объем поставки - от дениса
+    one_row['purchaseAmount'] = cnt_to_buy  # Объем поставки - от дениса
 
     one_row['spgzCharacteristics'] = []
     one_row['spgzCharacteristics'].append(
@@ -190,6 +226,69 @@ def make_one_row(product_name, prediction_num, engine):
     one_row['spgzCharacteristics'][0]['value1'] = 0  # значение 1
     one_row['spgzCharacteristics'][0]['value2'] = 0  # значение 2
     return one_row
+
+
+def exponential_smoothing(series, alpha):
+    '''
+    Функция для применения экспоненциального сглаживания к временному ряду.
+    Args:
+        series:
+        alpha:
+
+    Returns:
+
+    '''
+    result = [series[0]]
+
+    for n in range(1, len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
+    return result[-1]
+
+
+def get_cnt_sum(product_name: str, engine):
+    try:
+        query = f"""select * from financial_data where "Счет" = '{product_name}' and "Обороты за период (Сумма Дебет)" is not NULL and "Сальдо на начало периода (Сумма Дебет)" is not NULL """
+        data = pd.read_sql(query, engine)
+        data = data[data['Код'].isnull() != True]
+        data = data.fillna(0)
+
+        if len(data) <= 1:
+            return -2, -2
+
+        data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
+        data['used_sum'] = data['Обороты за период (Сумма Дебет)']
+
+        bought_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
+        for ind, row in data.iterrows():
+            bought_cnt[row['Квартал']] = row['used_cnt']
+        #     bought_cnt
+
+        bought_sum = {1: 0, 2: 0, 3: 0, 4: 0}
+        for ind, row in data.iterrows():
+            bought_sum[row['Квартал']] = row['used_sum']
+        #     bought_sum
+
+        cnt_to_buy = exponential_smoothing(np.asarray(list(bought_cnt.values())), 0.6)
+        sum_to_buy = exponential_smoothing(np.asarray(list(bought_sum.values())), 0.6)
+
+        return cnt_to_buy, sum_to_buy
+    except Exception as e:
+        print(e)
+        return -1, -1
+
+
+def all_regular_product_names(engine):
+    query = f'''select "Счет", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Квартал"
+                        from financial_data
+                        where "Код" is not NULL '''
+    financial_data_df = pd.read_sql(query, engine)
+    lst = financial_data_df['Счет'].unique().tolist()
+    lst_regular = []
+    for product_name in lst:
+        df = financial_data_df[financial_data_df['Счет'] == product_name]
+        if (df.groupby('Квартал')['Обороты за период (Кол-во Дебет)'].sum() > 0).sum() >= 2:
+            lst_regular.append(product_name)
+    return lst_regular
 
 
 def generate_stats_chart(stats_data):
