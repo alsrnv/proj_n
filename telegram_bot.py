@@ -1,147 +1,184 @@
-from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from keycloak import KeycloakOpenID
 import os
-import json
 import logging
-import asyncio
-import traceback
-import requests
-import subprocess
-import tempfile
 
-from analytics import generate_inventory_chart, generate_stats_chart
-
-
-START_ROUTES, END_ROUTES = range(2)
-
+logging.basicConfig(level=logging.DEBUG)
 
 class TelegramBot:
-
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config):
         self.config = config
-        self.commands = [
-            BotCommand(command='/start', description='Start the dialog with bot'),
-            BotCommand(command='/info', description='Invokes information about available commands'),
-            BotCommand(command='/stats', description='Показывает статистику по товару'),
-            BotCommand(command='/inventory', description='Показывает складские остатки'),
-        ]
+        self.application = ApplicationBuilder().token(config['token']).build()
+        self.authorized_users = {}
+        self.pending_auth = {}
 
-    async def start(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
-            await update.message.reply_html(
-                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
-                disable_web_page_preview=True
-            )
-            return
+        # Add command handlers
+        self.application.add_handler(CommandHandler('start', self.start))
+        self.application.add_handler(CommandHandler('info', self.info))
+        self.application.add_handler(CommandHandler('inventory', self.inventory))
+        self.application.add_handler(CommandHandler('stats', self.stats))
+        self.application.add_handler(CommandHandler('login', self.login))
+        self.application.add_handler(CommandHandler('product', self.product))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
-        start_message = rf"Привет, {update.effective_user.mention_html()}! Я бот для отслеживания складских остатков"
+        logging.debug("TelegramBot initialized with config and handlers added.")
 
-        await update.message.reply_html(
-            start_message,
-            disable_web_page_preview=True
-        )
-
-        await update.message.reply_html(
-            rf"Чтобы получить больше информации, отправьте /info",
-            disable_web_page_preview=True
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /start command.")
+        await update.message.reply_text(
+            'Привет! Я бот для автоматизации процесса закупок. Используйте /login для авторизации и доступа к остальным командам.'
         )
 
     async def info(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
-            await update.message.reply_html(
-                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
-                disable_web_page_preview=True
-            )
+        logging.debug("Received /info command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return
 
-        commands = self.commands
-        command_data = '\n\n' + '\n'.join([str(command.command + ' - ' + command.description) for command in commands])
-        await update.message.reply_html(
-            rf"Доступные команды: {command_data}",
-            disable_web_page_preview=True
+        await update.message.reply_text(
+            'Бот поддерживает следующие команды:\n'
+            '/start - Начать диалог\n'
+            '/info - Информация о командах\n'
+            '/stats - Показать статистику\n'
+            '/inventory - Показать складские остатки\n'
+            '/product - Выбор продукта для отображения складских остатков\n'
+            '/login - Авторизация через Keycloak'
         )
 
-        keyboard = [
-            [
-                InlineKeyboardButton("Option 1", callback_data="1"),
-                InlineKeyboardButton("Option 2", callback_data="2"),
-            ],
-            [InlineKeyboardButton("Option 3", callback_data="3")],
-        ]
+    async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /login command.")
+        self.pending_auth[update.message.from_user.id] = {'stage': 'username'}
+        await update.message.reply_text('Пожалуйста, введите ваше имя пользователя.')
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_html(
-            rf"Для дополнительной информации нажмите /help",
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = update.message.from_user.id
+        if user_id in self.pending_auth:
+            stage = self.pending_auth[user_id].get('stage')
+
+            if stage == 'username':
+                self.pending_auth[user_id]['username'] = update.message.text
+                self.pending_auth[user_id]['stage'] = 'password'
+                await update.message.reply_text('Теперь введите ваш пароль.')
+
+            elif stage == 'password':
+                self.pending_auth[user_id]['password'] = update.message.text
+                await self.authenticate_user(update, context)
+            
+            elif stage == 'product_name':
+                product_name = update.message.text
+                logging.debug(f"Received product name: {product_name}")
+                import analytics
+                try:
+                    chart_path = analytics.generate_inventory_for_product(product_name)
+                    await update.message.reply_photo(photo=open(chart_path, 'rb'))
+                except Exception as e:
+                    logging.error(f"Failed to generate inventory chart: {str(e)}")
+                    await update.message.reply_text(f"Ошибка при генерации графика для продукта: {str(e)}")
+                del self.pending_auth[user_id]
+
+    async def authenticate_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = update.message.from_user.id
+        username = self.pending_auth[user_id]['username']
+        password = self.pending_auth[user_id]['password']
+        
+        keycloak_openid = KeycloakOpenID(
+            server_url=os.getenv('KEYCLOAK_SERVER_URL'),
+            client_id=os.getenv('KEYCLOAK_CLIENT_ID'),
+            realm_name=os.getenv('KEYCLOAK_REALM_NAME'),
+            client_secret_key=os.getenv('KEYCLOAK_CLIENT_SECRET'),
+            verify=False  # Отключение проверки SSL
         )
+        
+        try:
+            token = keycloak_openid.token(
+                username=username,
+                password=password,
+                grant_type='password'
+            )
+            self.authorized_users[update.message.from_user.id] = True
+            del self.pending_auth[update.message.from_user.id]
+            await update.message.reply_text('Авторизация успешна! Теперь вам доступны все команды. Используйте /info для получения списка команд.')
+        except Exception as e:
+            logging.error(f"Failed to get Keycloak token: {str(e)}")
+            del self.pending_auth[update.message.from_user.id]
+            await update.message.reply_text(f"Авторизация не удалась: {str(e)}. Попробуйте снова с помощью команды /login.")
 
     async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
-            await update.message.reply_html(
-                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</а> для получения большей информации""",
-                disable_web_page_preview=True
-            )
+        logging.debug("Received /inventory command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return
 
-        # Загрузка данных из базы данных
-        # Пример данных для демонстрации
-        data = {
-            'Товар': ['Товар 1', 'Товар 2', 'Товар 3', 'Товар 4'],
-            'Количество': [100, 150, 200, 250]
-        }
-
-        # Генерация графика
-        tmp_file_path = generate_inventory_chart(data)
-
-        # Отправка графика пользователю
-        with open(tmp_file_path, 'rb') as photo:
-            await update.message.reply_photo(photo)
-
-        # Удаление временного файла
-        os.remove(tmp_file_path)
+        import analytics
+        data = {'Товар': ['Товар1', 'Товар2'], 'Количество': [10, 20]}
+        chart_path = analytics.generate_inventory_chart(data)
+        await update.message.reply_photo(photo=open(chart_path, 'rb'))
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if str(update.message.from_user.id) not in self.config['allowed_user_ids']:
-            await update.message.reply_html(
-                rf"""Вам запрещён доступ. Свяжитесь с <a href="https://t.me/@denis_selu">@support2</a> для получения большей информации""",
-                disable_web_page_preview=True
-            )
+        logging.debug("Received /stats command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return
 
-        # Пример данных для демонстрации
-        stats_data = {
-            'Дата': ['2023-06-01', '2023-06-02', '2023-06-03', '2023-06-04'],
-            'Значение': [10, 15, 7, 20]
-        }
+        import analytics
+        data = {'Дата': ['2024-01-01', '2024-02-01'], 'Значение': [100, 200]}
+        chart_path = analytics.generate_stats_chart(data)
+        await update.message.reply_photo(photo=open(chart_path, 'rb'))
 
-        # Генерация графика
-        tmp_file_path = generate_stats_chart(stats_data)
+    async def product(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /product command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
 
-        # Отправка графика пользователю
-        with open(tmp_file_path, 'rb') as photo:
-            await update.message.reply_photo(photo)
+        webapp_url = os.getenv('WEBAPP_URL')
+        if not webapp_url.startswith("https://"):
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
+            return
 
-        # Удаление временного файла
-        os.remove(tmp_file_path)
+        await update.message.reply_text(
+            'Для выбора продукта перейдите по ссылке ниже:',
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Выбор продукта", web_app=WebAppInfo(url=f"{webapp_url}/products.html"))]]
+            )
+        )
 
-    async def post_init(self, application: Application) -> None:
-        await application.bot.set_my_commands([(botCommand.command, botCommand.description) for botCommand in self.commands])
-
-    def run(self) -> None:
+    async def product_selected(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        data = context.args[0]
+        user_id = data.get('user_id')
+        product_name = data.get('product_name')
+        
+        import analytics
         try:
-            application = ApplicationBuilder() \
-                .token(self.config['token']) \
-                .post_init(self.post_init) \
-                .concurrent_updates(True) \
-                .build()
+            chart_path = analytics.generate_inventory_for_product(product_name)
+            await self.application.bot.send_photo(chat_id=user_id, photo=open(chart_path, 'rb'))
         except Exception as e:
-            logging.exception(e)
-            raise e
+            logging.error(f"Failed to generate inventory chart: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
 
-        application.add_handler(CommandHandler('start', self.start))
-        application.add_handler(CommandHandler("info", self.info))
-        application.add_handler(CommandHandler('stats', self.stats))
-        application.add_handler(CommandHandler('inventory', self.inventory))
+    def is_user_authorized(self, update: Update) -> bool:
+        user_id = update.message.from_user.id
+        return self.authorized_users.get(user_id, False)
 
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    def run(self):
+        logging.debug("Starting bot polling.")
+        self.application.run_polling()
+
+if __name__ == "__main__":
+    import json
+    import threading
+
+    config = {
+        'token': os.getenv('TELEGRAM_TOKEN')
+    }
+
+    bot = TelegramBot(config)
+
+    # Запуск Flask в отдельном потоке
+    from webapp import WebApp
+    web_app = WebApp()
+    flask_thread = threading.Thread(target=web_app.run)
+    flask_thread.start()
+
+    bot.run()

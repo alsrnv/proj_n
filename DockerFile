@@ -2,9 +2,15 @@ FROM python:3.9
 
 WORKDIR /usr/src/app
 
+# Установка supervisor
+RUN apt-get update && apt-get install -y supervisor
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "main.py"]
+# Копирование конфигурации supervisord
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

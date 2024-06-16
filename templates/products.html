@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Выбор продукта</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .product-button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            text-align: center;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Выберите продукт</h1>
+    <div id="product-list"></div>
+
+    <script>
+        function getProducts() {
+            return fetch('/get_products')
+                .then(response => response.json())
+                .then(data => data.products);
+        }
+
+        function renderProductList(products) {
+            const productList = document.getElementById('product-list');
+            productList.innerHTML = '';
+
+            products.forEach(product => {
+                const button = document.createElement('button');
+                button.className = 'product-button';
+                button.textContent = product;
+                button.onclick = () => selectProduct(product);
+                productList.appendChild(button);
+            });
+        }
+
+        function selectProduct(productName) {
+            const user = Telegram.WebApp.initDataUnsafe.user;
+            const userId = user ? user.id : null;
+            
+            if (userId) {
+                fetch('/product_selection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ product_name: productName, user_id: userId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Telegram.WebApp.close();
+                    } else {
+                        alert('Ошибка при выборе продукта');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                });
+            } else {
+                alert('Пользователь не авторизован');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            getProducts().then(renderProductList);
+        });
+    </script>
+</body>
+</html>

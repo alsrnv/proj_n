@@ -8,4 +8,12 @@ services:
       - .env
     volumes:
       - .:/usr/src/app
-    command: python main.py
+    networks:
+      - my_network
+    ports:
+      - "5001:5000"
+    command: supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    
+networks:
+  my_network:
+    external: true

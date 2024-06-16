@@ -4,3 +4,12 @@ icecream
 requests
 python-telegram-bot
 matplotlib
+Flask
+python-keycloak
+nest_asyncio
+httpx
+pandas
+sqlalchemy
+plotly
+numpy
+psycopg2-binary
