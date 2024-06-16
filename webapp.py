@@ -3,6 +3,10 @@ import os
 import logging
 import requests
 import asyncio
+import pandas as pd
+import plotly.express as px
+import io
+from telegram import Bot
 
 class WebApp:
     def __init__(self, bot):
@@ -40,19 +44,32 @@ class WebApp:
                 logging.error("Missing user_id or product_name")
                 return jsonify({'success': False, 'error': 'Missing user_id or product_name'}), 400
 
-            # Отправка выбранного продукта обратно в Telegram бота
-            telegram_bot_url = os.getenv('TELEGRAM_BOT_URL')
-            if not telegram_bot_url:
-                logging.error("TELEGRAM_BOT_URL is not set.")
-                return jsonify({'success': False, 'error': 'TELEGRAM_BOT_URL is not set'}), 500
+            import analytics
+            engine = analytics.get_database_connection()
+            product_data = analytics.history_remains_for_product(product_name, engine)
 
-            try:
-                # Используем asyncio для вызова асинхронной функции
-                asyncio.run(self.bot.product_selected({'user_id': user_id, 'product_name': product_name}))
-                return jsonify({'success': True}), 200
-            except Exception as e:
-                logging.error(f"Exception while notifying Telegram bot: {str(e)}")
-                return jsonify({'success': False, 'error': str(e)}), 500
+            if not product_data:
+                return jsonify({'error': 'Нет данных для продукта'}), 400
+
+            fig = px.line(x=list(product_data.keys()), y=list(product_data.values()), title=f'Остатки для продукта {product_name}')
+            fig.update_layout(
+                xaxis_title='Дата',
+                yaxis_title='Остаток',
+                template='plotly_white'
+            )
+
+            # Сохранение графика как изображение для отправки в Telegram
+            img_bytes = io.BytesIO()
+            fig.write_image(img_bytes, format='png')
+            img_bytes.seek(0)
+
+            # Отправка изображения графика в Telegram
+            bot = Bot(token=os.getenv('TELEGRAM_TOKEN'))
+            bot.send_photo(chat_id=user_id, photo=img_bytes)
+
+            # Возврат данных для отображения интерактивного графика
+            graph_json = fig.to_json()
+            return jsonify({'graph_json': graph_json, 'success': True})
 
     def run(self):
         logging.debug("Starting Flask server.")

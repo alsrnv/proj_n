@@ -4,101 +4,111 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Выбор продукта</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
             padding: 0;
+            background-color: #f8f9fa;
+        }
+        .container {
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+            background-color: #ffffff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
         }
         h1 {
             text-align: center;
-            color: #333;
+            color: #343a40;
         }
-        #searchBox {
+        #search {
             width: 100%;
             padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
         }
-        #productList {
+        #product-list {
             max-height: 400px;
             overflow-y: auto;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
             padding: 10px;
+            background-color: #ffffff;
         }
         .product-item {
             padding: 10px;
-            margin-bottom: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border-bottom: 1px solid #ddd;
             cursor: pointer;
-            transition: background-color 0.3s, border-color 0.3s;
         }
         .product-item:hover {
-            background-color: #f9f9f9;
-            border-color: #bbb;
+            background-color: #f8f9fa;
+        }
+        #graph-container {
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <h1>Выберите продукт</h1>
-    <input type="text" id="searchBox" placeholder="Поиск продукта...">
-    <div id="productList"></div>
+    <div class="container">
+        <h1>Выберите продукт</h1>
+        <input type="text" id="search" placeholder="Поиск продукта..." oninput="filterProducts()">
+        <div id="product-list"></div>
+        <div id="graph-container"></div>
+    </div>
 
     <script>
-        const products = [];
+        let products = [];
 
-        // Fetch products from the server
-        fetch('/get_products')
-            .then(response => response.json())
-            .then(data => {
-                products.push(...data.products.sort());
-                displayProducts(products);
-            });
+        document.addEventListener("DOMContentLoaded", function() {
+            fetch('/get_products')
+                .then(response => response.json())
+                .then(data => {
+                    products = data.products;
+                    displayProducts(products);
+                });
+        });
 
         function displayProducts(products) {
-            const productList = document.getElementById('productList');
+            const productList = document.getElementById('product-list');
             productList.innerHTML = '';
-
             products.forEach(product => {
                 const div = document.createElement('div');
-                div.textContent = product;
                 div.classList.add('product-item');
-                div.addEventListener('click', () => selectProduct(product));
+                div.textContent = product;
+                div.onclick = () => selectProduct(product);
                 productList.appendChild(div);
             });
         }
 
-        function selectProduct(product) {
+        function filterProducts() {
+            const searchValue = document.getElementById('search').value.toLowerCase();
+            const filteredProducts = products.filter(product => product.toLowerCase().includes(searchValue));
+            displayProducts(filteredProducts);
+        }
+
+        function selectProduct(productName) {
+            const userId = 106876290; // Здесь укажите ID пользователя из Telegram
             fetch('/product_selection', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ product_name: product, user_id: getUserID() }),
+                body: JSON.stringify({ product_name: productName, user_id: userId })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Продукт выбран');
+                    Plotly.newPlot('graph-container', JSON.parse(data.graph_json));
                 } else {
-                    alert('Ошибка при выборе продукта: ' + data.error);
+                    alert(data.error);
                 }
-            });
+            })
+            .catch(error => console.error('Error:', error));
         }
-
-        function getUserID() {
-            // Implement a function to retrieve the user ID
-            return 106876290;  // Example user ID
-        }
-
-        document.getElementById('searchBox').addEventListener('input', function() {
-            const searchTerm = this.value.toLowerCase();
-            const filteredProducts = products.filter(product => product.toLowerCase().includes(searchTerm));
-            displayProducts(filteredProducts);
-        });
     </script>
 </body>
 </html>
