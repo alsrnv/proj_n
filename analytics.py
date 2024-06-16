@@ -119,43 +119,36 @@ def generate_inventory_chart(data, product_name):
     Generates a bar chart for inventory data.
     
     Parameters:
-        data (dict): Dictionary with dates as keys and inventory levels as values.
+        data (dict): Dictionary with 'Товар' and 'Количество' keys.
         product_name(str): Name of the product.
     
     Returns:
         str: Path to the saved chart image.
     """
-    dates = list(data.keys())
-    values = list(data.values())
+    colors = ['red', 'orange', 'yellow', 'green']
 
-    fig = px.bar(x=dates, y=values, title=f'Остатки для продукта {product_name}', labels={'x': 'Дата', 'y': 'Остаток'})
+    # Определение цвета для каждого значения в данных
+    color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
+
+    fig = make_subplots(rows=1, cols=len(data), shared_yaxes=True,
+                        subplot_titles=list(data.keys()))
+
+    # Добавляем каждый график в соответствующий подграфик с указанием цвета
+    for i, (date, value) in enumerate(data.items(), start=1):
+        fig.add_trace(go.Bar(x=[date], y=[value], name=date, showlegend=False, marker=dict(color=color_scale[i - 1])),
+                      row=1, col=i)
+
+    # Обновляем макет для лучшей читаемости и добавляем подпись оси Y только к первому подграфику
+    fig.update_yaxes(title_text="Количество", row=1, col=1)
+    fig.update_xaxes(showticklabels=False)  # Убираем подписи на оси X
+
+    # Обновляем общие параметры макета
     fig.update_layout(
-        xaxis_title='Дата',
-        yaxis_title='Остаток',
-        template='plotly_white'
+        height=400,
+        width=800,
+        title_text=f"Остаток {product_name}",
+        title_x=0.5  # Центрируем заголовок
     )
-
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-        fig.write_image(tmp_file.name)
-    tmp_file_path = tmp_file.name
-
-    return tmp_file_path
-
-def generate_inventory_for_product(product_name):
-    engine = get_database_connection()
-
-    values = history_remains_for_product(product_name, engine)
-    if not values:
-        raise ValueError(f"Нет данных для продукта: {product_name}")
-
-    # Генерация бар-чарта с использованием Plotly
-    dates = list(values.keys())
-    quantities = list(values.values())
-    
-    fig = go.Figure([go.Bar(x=dates, y=quantities)])
-    fig.update_layout(title=f"Остатки для продукта {product_name}",
-                      xaxis_title="Дата",
-                      yaxis_title="Остаток")
 
     graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
@@ -164,3 +157,12 @@ def generate_inventory_for_product(product_name):
     tmp_file_path = tmp_file.name
 
     return tmp_file_path, graph_json
+
+def generate_inventory_for_product(product_name):
+    engine = get_database_connection()
+
+    values = history_remains_for_product(product_name, engine)
+    if not values:
+        raise ValueError(f"Нет данных для продукта: {product_name}")
+
+    return generate_inventory_chart(values, product_name)

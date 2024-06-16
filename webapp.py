@@ -3,8 +3,6 @@ import os
 import logging
 import requests
 import asyncio
-import json
-import analytics
 
 class WebApp:
     def __init__(self, bot):
@@ -27,6 +25,7 @@ class WebApp:
         @self.app.route('/get_products')
         def get_products():
             logging.debug("Serving product list")
+            import analytics
             products = analytics.get_unique_products()
             return jsonify({'products': products})
 
@@ -41,13 +40,19 @@ class WebApp:
                 logging.error("Missing user_id or product_name")
                 return jsonify({'success': False, 'error': 'Missing user_id or product_name'}), 400
 
-            # Генерация графика
+            # Отправка выбранного продукта обратно в Telegram бота
+            telegram_bot_url = os.getenv('TELEGRAM_BOT_URL')
+            if not telegram_bot_url:
+                logging.error("TELEGRAM_BOT_URL is not set.")
+                return jsonify({'success': False, 'error': 'TELEGRAM_BOT_URL is not set'}), 500
+
             try:
-                chart_path, graph_json = analytics.generate_inventory_for_product(product_name)
-                asyncio.run(self.bot.product_selected({'user_id': user_id, 'product_name': product_name, 'chart_path': chart_path}))
+                import analytics
+                image_path, graph_json = analytics.generate_inventory_for_product(product_name)
+                asyncio.run(self.bot.product_selected({'user_id': user_id, 'product_name': product_name, 'image_path': image_path, 'graph_json': graph_json}))
                 return jsonify({'success': True, 'graph_json': graph_json, 'values': analytics.history_remains_for_product(product_name, analytics.get_database_connection())}), 200
             except Exception as e:
-                logging.error(f"Exception while generating graph: {str(e)}")
+                logging.error(f"Exception while notifying Telegram bot: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
 
     def run(self):
