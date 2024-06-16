@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import json
 
+
 def day_of_quarter(quarter, day_type, year='2022'):
     quarter = int(quarter)
     year = int(year)
@@ -28,10 +29,12 @@ def day_of_quarter(quarter, day_type, year='2022'):
             last_day = first_day_of_next_month - timedelta(days=1)
         return last_day.strftime('%d-%m-%Y')
 
+
 def get_database_connection():
     db_url = os.getenv('DATABASE_URL')
     engine = create_engine(db_url)
     return engine
+
 
 def history_remains_for_product(product_name, engine):
     values = {}
@@ -56,6 +59,7 @@ def history_remains_for_product(product_name, engine):
 
     return values
 
+
 def make_kpgz_spgz_ste(product_name, engine):
     query = f"""
     SELECT *
@@ -64,6 +68,7 @@ def make_kpgz_spgz_ste(product_name, engine):
     LIMIT 1
     """
     return pd.read_sql(query, engine).iloc[0].to_dict()
+
 
 def make_contracts(product_name, engine):
     query = f"""
@@ -74,9 +79,11 @@ def make_contracts(product_name, engine):
     """
     return pd.read_sql(query, engine).iloc[0].to_dict()
 
+
 def all_distinct_products(engine):
     query = f"""SELECT DISTINCT "Счет" FROM financial_data"""
     return pd.read_sql(query, engine)['Счет'].to_list()
+
 
 def get_unique_products():
     engine = get_database_connection()
@@ -90,6 +97,7 @@ def get_unique_products():
         raise RuntimeError(f"Ошибка при выполнении SQL запроса: {str(e)}")
 
     return df['Основное средство'].tolist()
+
 
 def generate_stats_chart(stats_data):
     """
@@ -113,6 +121,7 @@ def generate_stats_chart(stats_data):
         tmp_file_path = tmp_file.name
 
     return tmp_file_path
+
 
 def generate_inventory_chart(data, product_name):
     """
@@ -158,6 +167,7 @@ def generate_inventory_chart(data, product_name):
 
     return tmp_file_path, graph_json
 
+
 def generate_inventory_for_product(product_name):
     engine = get_database_connection()
 
@@ -166,3 +176,54 @@ def generate_inventory_for_product(product_name):
         raise ValueError(f"Нет данных для продукта: {product_name}")
 
     return generate_inventory_chart(values, product_name)
+
+
+def double_exponential_smoothing(series, alpha, beta, horizon=1):
+    h = horizon - 1
+    result = [series[0]]
+    for n in range(1, len(series) + h):
+        if n == 1:
+            level, trend = series[0], series[1] - series[0]
+        if n >= len(series):  # прогнозируем
+            value = result[-1]
+        else:
+            value = series[n]
+        last_level, level = level, alpha * value + (1 - alpha) * (level + trend)
+        trend = beta * (level - last_level) + (1 - beta) * trend
+        result.append(level + trend)
+    return result[-horizon:]
+
+
+def get_cnt_sum(product: str, engine, period: int = 1):
+    try:
+        query = f"""select * from financial_data where "Счет" = '{product}' and "Обороты за период (Сумма Дебет)" is not NULL"""
+        data = pd.read_sql(query, engine)
+        data = data[data['Код'].isnull() != True]
+        data = data.fillna(0)
+
+        if len(data) <= 1:
+            return -2, -2
+
+        data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
+        data['used_sum'] = data['Обороты за период (Сумма Дебет)']
+
+        bought_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
+        for ind, row in data.iterrows():
+            bought_cnt[row['Квартал']] = row['used_cnt']
+        #     bought_cnt
+
+        bought_sum = {1: 0, 2: 0, 3: 0, 4: 0}
+        for ind, row in data.iterrows():
+            bought_sum[row['Квартал']] = row['used_sum']
+        #     bought_sum
+
+        history_cnt = np.asarray(list(bought_cnt.values()))
+        history_sum = np.asarray(list(bought_sum.values()))
+
+        cnt_to_buy = double_exponential_smoothing(history_cnt, 0.6, 0.4, period)
+        sum_to_buy = double_exponential_smoothing(history_sum, 0.6, 0.4, period)
+
+        return list(map(np.ceil, cnt_to_buy)), sum_to_buy
+    except Exception as e:
+        print(e)
+        return -1, -1

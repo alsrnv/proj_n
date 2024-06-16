@@ -32,9 +32,9 @@ class TelegramBot:
 
     async def info(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /info command.")
-        if not self.is_user_authorized(update):
-            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
-            return
+        # if not self.is_user_authorized(update):
+        #     await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+        #     return
 
         await update.message.reply_text(
             'Бот поддерживает следующие команды:\n'
@@ -43,6 +43,7 @@ class TelegramBot:
             '/stats - Показать статистику\n'
             '/inventory - Показать складские остатки\n'
             '/product - Выбор продукта для отображения складских остатков\n'
+            '/predict - Предсказание закупок для товара\n'
             '/login - Авторизация через Keycloak'
         )
 
@@ -106,9 +107,9 @@ class TelegramBot:
 
     async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /inventory command.")
-        if not self.is_user_authorized(update):
-            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
-            return
+        # if not self.is_user_authorized(update):
+        #     await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+        #     return
 
         import analytics
         data = {'Товар': ['Товар1', 'Товар2'], 'Количество': [10, 20]}
@@ -117,9 +118,9 @@ class TelegramBot:
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /stats command.")
-        if not self.is_user_authorized(update):
-            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
-            return
+        # if not self.is_user_authorized(update):
+        #     await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+        #     return
 
         import analytics
         data = {'Дата': ['2024-01-01', '2024-02-01'], 'Значение': [100, 200]}
@@ -147,6 +148,53 @@ class TelegramBot:
                 [[InlineKeyboardButton("Выбор продукта", web_app=WebAppInfo(url=f"{webapp_url}/products.html"))]]
             )
         )
+
+
+    async def predict(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /predict command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+
+        webapp_url = os.getenv('WEBAPP_URL')
+        if not webapp_url:
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
+            return
+
+        if not webapp_url.startswith("https://"):
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
+            return
+
+        await update.message.reply_text(
+            'Для выбора продукта перейдите по ссылке ниже:',
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Выбор продукта", web_app=WebAppInfo(url=f"{webapp_url}/predicts.html"))]]
+            )
+        )
+
+    async def prediction_selected(self, data):
+        user_id = data.get('user_id')
+        product_name = data.get('product_name')
+        image_path = data.get('image_path')
+
+        import analytics
+        try:
+            await self.application.bot.send_photo(chat_id=user_id, photo=open(image_path, 'rb'))
+            values = analytics.get_cnt_sum(product_name, analytics.get_database_connection(), 4)[0]
+            values_text = '\n'.join([f'{index}: {value}' for index, value in enumerate(values)])
+            await self.application.bot.send_message(chat_id=user_id,
+                                                    text=f"Предсказания для продукта {product_name}:\n{values_text}")
+        except ValueError as e:
+            logging.error(f"No data for product: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Нет данных для продукта: {str(e)}")
+        except RuntimeError as e:
+            logging.error(f"SQL execution error: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id,
+                                                    text=f"Ошибка при выполнении SQL запроса: {str(e)}")
+        except Exception as e:
+            logging.error(f"Failed to generate prediction chart: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id,
+                                                    text=f"Ошибка при генерации графика для продукта: {str(e)}")
 
     async def product_selected(self, data):
         user_id = data.get('user_id')
