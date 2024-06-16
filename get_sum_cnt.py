@@ -2,9 +2,16 @@ import pandas as pd
 from sqlalchemy import create_engine
 from IPython.display import display
 import numpy as np
-import String
+# import sys
 
 import psycopg2
+
+def exponential_smoothing(series, alpha):
+    result = [series[0]] 
+    
+    for n in range(1, len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n-1])
+    return result[-1]
 
 def get_cnt_sum(product: str):
     try:
@@ -47,3 +54,9 @@ def get_cnt_sum(product: str):
         print(e)
         return -1, -1
     
+# def main():
+#     args = sys.argv[1:]
+#     print(get_cnt_sum(args[0]))
+
+# if __name__ == '__main__':
+#     main()
