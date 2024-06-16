@@ -1,86 +1,113 @@
-import matplotlib.pyplot as plt
-import tempfile
+import os
 import pandas as pd
 from sqlalchemy import create_engine
+import plotly.express as px
+import tempfile
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 
-def connect_to_db():
-    """
-    Function to connect to the database.
-    :return: engine: Database connection object.
-    """
-    db_config = {
-        'user': 'user_main',
-        'password': 'user108',
-        'host': '85.193.90.86',
-        'port': '5532',
-        'database': 'hack_db'
-    }
-    connection_string = f"postgresql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
-    return create_engine(connection_string)
+def day_of_quarter(quarter, day_type, year='2022'):
+    quarter = int(quarter)
+    year = int(year)
 
-def get_unique_products():
-    """
-    Function to get a list of unique products.
-    :return: List of unique products.
-    """
-    engine = connect_to_db()
-    query = 'SELECT DISTINCT "Счет" FROM financial_data'
-    df = pd.read_sql(query, engine)
-    return df['Счет'].tolist()
+    if day_type == 'first':
+        first_month_of_quarter = (quarter - 1) * 3 + 1
+        first_day = datetime(year, first_month_of_quarter, 1)
+        return first_day.strftime('%d-%m-%Y')
+
+    elif day_type == 'last':
+        last_month_of_quarter = quarter * 3
+        if last_month_of_quarter == 12:
+            last_day = datetime(year, last_month_of_quarter, 31)
+        else:
+            first_day_of_next_month = datetime(year, last_month_of_quarter % 12 + 1, 1)
+            last_day = first_day_of_next_month - timedelta(days=1)
+        return last_day.strftime('%d-%m-%Y')
+
+
+def get_database_connection():
+    db_url = os.getenv('DATABASE_URL')
+    engine = create_engine(db_url)
+    return engine
+
+def history_remains_for_product(product_name, engine):
+    values = {}
+    for num_quater in range(1, 5):
+        query = f'''select "Счет", "Сальдо на начало периода (Кол-во Де", "Сальдо на конец периода (Кол-во Деб", "Квартал"
+                    from financial_data
+                    where "Код" is not NULL
+                    and "Счет" = '{product_name}'
+                    and "Квартал" = '{num_quater}'
+                '''
+        num_at_beginning = pd.read_sql(query, engine).fillna(0)['Сальдо на начало периода (Кол-во Де']
+        if len(num_at_beginning) == 0:
+            values[day_of_quarter(num_quater, 'first')] = 0
+        else:
+            values[day_of_quarter(num_quater, 'first')] = int(num_at_beginning.sum())
+        if num_quater == 4:
+            num_at_end = pd.read_sql(query, engine).fillna(0)['Сальдо на конец периода (Кол-во Деб']
+            if len(num_at_end) == 0:
+                values[day_of_quarter(num_quater, 'last')] = 0
+            else:
+                values[day_of_quarter(num_quater, 'last')] = int(num_at_end.sum())
+
+    return values
 
 def generate_inventory_for_product(product_name):
-    """
-    Function to generate inventory chart for a specific product.
-    :param product_name: Name of the product.
-    :return: Path to the saved chart image.
-    """
-    engine = connect_to_db()
-    query = f'''
-    SELECT "Дата", "Остаток"
-    FROM inventory_data
-    WHERE "Товар" = '{product_name}'
-    ORDER BY "Дата"
-    '''
-    df = pd.read_sql(query, engine)
+    engine = get_database_connection()
 
-    if df.empty:
-        raise ValueError(f"No data found for product: {product_name}")
+    values = history_remains_for_product(product_name, engine)
+    if not values:
+        raise ValueError(f"Нет данных для продукта: {product_name}")
 
-    fig, ax = plt.subplots()
-    ax.plot(df['Дата'], df['Остаток'], marker='o', linestyle='-')
-    ax.set_title(f'История остатков для {product_name}')
-    ax.set_xlabel('Дата')
-    ax.set_ylabel('Остаток')
+    # Построение графика с использованием Plotly
+    fig = px.line(x=list(values.keys()), y=list(values.values()), title=f'Остатки для продукта {product_name}')
+    fig.update_layout(
+        xaxis_title='Дата',
+        yaxis_title='Остаток',
+        template='plotly_white'
+    )
 
-    # Save the chart to a temporary file
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-        plt.savefig(tmp_file.name)
-        tmp_file_path = tmp_file.name
+        fig.write_image(tmp_file.name)
+    tmp_file_path = tmp_file.name
 
     return tmp_file_path
 
-def generate_inventory_chart(data):
+def make_kpgz_spgz_ste(product_name, engine):
+    query = f"""
+    SELECT *
+    FROM refences_data
+    WHERE "Название СТЕ" ILIKE '%%{product_name}%%'
+    LIMIT 1
     """
-    Generates a bar chart for inventory data.
-    
-    Parameters:
-        data (dict): Dictionary with 'Товар' and 'Количество' keys.
-    
-    Returns:
-        str: Path to the saved chart image.
+    return pd.read_sql(query, engine).iloc[0].to_dict()
+
+def make_contracts(product_name, engine):
+    query = f"""
+    SELECT *
+    FROM contracts
+    WHERE "Наименование СПГЗ" ILIKE '%%{product_name}%%'
+    LIMIT 1
     """
-    fig, ax = plt.subplots()
-    ax.bar(data['Товар'], data['Количество'])
-    ax.set_title('Складские остатки')
-    ax.set_xlabel('Товар')
-    ax.set_ylabel('Количество')
+    return pd.read_sql(query, engine).iloc[0].to_dict()
 
-    # Save the chart to a temporary file
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-        plt.savefig(tmp_file.name)
-        tmp_file_path = tmp_file.name
+def all_distinct_products(engine):
+    query = f"""SELECT DISTINCT "Счет" FROM financial_data"""
+    return pd.read_sql(query, engine)['Счет'].to_list()
 
-    return tmp_file_path
+def get_unique_products():
+    engine = get_database_connection()
+    query = """
+    SELECT DISTINCT "Основное средство"
+    FROM inventory_balances
+    """
+    try:
+        df = pd.read_sql(query, engine)
+    except Exception as e:
+        raise RuntimeError(f"Ошибка при выполнении SQL запроса: {str(e)}")
+
+    return df['Основное средство'].tolist()
 
 def generate_stats_chart(stats_data):
     """
@@ -98,7 +125,7 @@ def generate_stats_chart(stats_data):
     ax.set_xlabel('Дата')
     ax.set_ylabel('Значение')
 
-    # Save the chart to a temporary file
+    # Сохранение графика во временный файл
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
         plt.savefig(tmp_file.name)
         tmp_file_path = tmp_file.name

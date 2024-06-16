@@ -1,15 +1,14 @@
-import asyncio
 from flask import Flask, request, jsonify, send_from_directory
-from telegram_bot import TelegramBot
 import os
 import logging
 import requests
+import asyncio
 
 class WebApp:
     def __init__(self, bot):
         self.app = Flask(__name__)
         self.app.secret_key = os.getenv('FLASK_SECRET_KEY')
-        self.bot = bot  # Сохраняем объект bot
+        self.bot = bot  # Сохраняем объект bot в атрибуте класса
         self.setup_routes()
 
     def setup_routes(self):
@@ -41,9 +40,15 @@ class WebApp:
                 logging.error("Missing user_id or product_name")
                 return jsonify({'success': False, 'error': 'Missing user_id or product_name'}), 400
 
-            # Вызов метода product_selected напрямую
+            # Отправка выбранного продукта обратно в Telegram бота
+            telegram_bot_url = os.getenv('TELEGRAM_BOT_URL')
+            if not telegram_bot_url:
+                logging.error("TELEGRAM_BOT_URL is not set.")
+                return jsonify({'success': False, 'error': 'TELEGRAM_BOT_URL is not set'}), 500
+
             try:
-                asyncio.run(self.bot.product_selected(data))
+                # Используем asyncio для вызова асинхронной функции
+                asyncio.run(self.bot.product_selected({'user_id': user_id, 'product_name': product_name}))
                 return jsonify({'success': True}), 200
             except Exception as e:
                 logging.error(f"Exception while notifying Telegram bot: {str(e)}")

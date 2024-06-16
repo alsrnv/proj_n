@@ -97,7 +97,7 @@ class TelegramBot:
                 grant_type='password'
             )
             self.authorized_users[update.message.from_user.id] = True
-            del self.pending_auth[update.message.from_user.id]
+            del self.pending_auth[user_id]
             await update.message.reply_text('Авторизация успешна! Теперь вам доступны все команды. Используйте /info для получения списка команд.')
         except Exception as e:
             logging.error(f"Failed to get Keycloak token: {str(e)}")
@@ -148,7 +148,6 @@ class TelegramBot:
             )
         )
 
-
     async def product_selected(self, data):
         user_id = data.get('user_id')
         product_name = data.get('product_name')
@@ -157,11 +156,15 @@ class TelegramBot:
         try:
             chart_path = analytics.generate_inventory_for_product(product_name)
             await self.application.bot.send_photo(chat_id=user_id, photo=open(chart_path, 'rb'))
+        except ValueError as e:
+            logging.error(f"No data for product: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Нет данных для продукта: {str(e)}")
+        except RuntimeError as e:
+            logging.error(f"SQL execution error: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при выполнении SQL запроса: {str(e)}")
         except Exception as e:
             logging.error(f"Failed to generate inventory chart: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
-
-
 
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
@@ -188,3 +191,4 @@ if __name__ == "__main__":
     flask_thread.start()
 
     bot.run()
+
