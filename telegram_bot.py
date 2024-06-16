@@ -6,6 +6,7 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
+
 class TelegramBot:
     def __init__(self, config):
         self.config = config
@@ -32,9 +33,9 @@ class TelegramBot:
 
     async def info(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /info command.")
-        # if not self.is_user_authorized(update):
-        #     await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
-        #     return
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
 
         await update.message.reply_text(
             'Бот поддерживает следующие команды:\n'
@@ -65,7 +66,7 @@ class TelegramBot:
             elif stage == 'password':
                 self.pending_auth[user_id]['password'] = update.message.text
                 await self.authenticate_user(update, context)
-            
+
             elif stage == 'product_name':
                 product_name = update.message.text
                 logging.debug(f"Received product name: {product_name}")
@@ -82,7 +83,7 @@ class TelegramBot:
         user_id = update.message.from_user.id
         username = self.pending_auth[user_id]['username']
         password = self.pending_auth[user_id]['password']
-        
+
         keycloak_openid = KeycloakOpenID(
             server_url=os.getenv('KEYCLOAK_SERVER_URL'),
             client_id=os.getenv('KEYCLOAK_CLIENT_ID'),
@@ -90,7 +91,7 @@ class TelegramBot:
             client_secret_key=os.getenv('KEYCLOAK_CLIENT_SECRET'),
             verify=False  # Отключение проверки SSL
         )
-        
+
         try:
             token = keycloak_openid.token(
                 username=username,
@@ -99,17 +100,19 @@ class TelegramBot:
             )
             self.authorized_users[update.message.from_user.id] = True
             del self.pending_auth[update.message.from_user.id]
-            await update.message.reply_text('Авторизация успешна! Теперь вам доступны все команды. Используйте /info для получения списка команд.')
+            await update.message.reply_text(
+                'Авторизация успешна! Теперь вам доступны все команды. Используйте /info для получения списка команд.')
         except Exception as e:
             logging.error(f"Failed to get Keycloak token: {str(e)}")
             del self.pending_auth[user_id]
-            await update.message.reply_text(f"Авторизация не удалась: {str(e)}. Попробуйте снова с помощью команды /login.")
+            await update.message.reply_text(
+                f"Авторизация не удалась: {str(e)}. Попробуйте снова с помощью команды /login.")
 
     async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /inventory command.")
-        # if not self.is_user_authorized(update):
-        #     await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
-        #     return
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
 
         import analytics
         data = {'Товар': ['Товар1', 'Товар2'], 'Количество': [10, 20]}
@@ -118,9 +121,9 @@ class TelegramBot:
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /stats command.")
-        # if not self.is_user_authorized(update):
-        #     await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
-        #     return
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
 
         import analytics
         data = {'Дата': ['2024-01-01', '2024-02-01'], 'Значение': [100, 200]}
@@ -148,7 +151,6 @@ class TelegramBot:
                 [[InlineKeyboardButton("Выбор продукта", web_app=WebAppInfo(url=f"{webapp_url}/products.html"))]]
             )
         )
-
 
     async def predict(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /predict command.")
@@ -206,16 +208,19 @@ class TelegramBot:
             await self.application.bot.send_photo(chat_id=user_id, photo=open(image_path, 'rb'))
             values = analytics.history_remains_for_product(product_name, analytics.get_database_connection())
             values_text = '\n'.join([f'{date}: {value}' for date, value in values.items()])
-            await self.application.bot.send_message(chat_id=user_id, text=f"Остатки для продукта {product_name}:\n{values_text}")
+            await self.application.bot.send_message(chat_id=user_id,
+                                                    text=f"Остатки для продукта {product_name}:\n{values_text}")
         except ValueError as e:
             logging.error(f"No data for product: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Нет данных для продукта: {str(e)}")
         except RuntimeError as e:
             logging.error(f"SQL execution error: {str(e)}")
-            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при выполнении SQL запроса: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id,
+                                                    text=f"Ошибка при выполнении SQL запроса: {str(e)}")
         except Exception as e:
             logging.error(f"Failed to generate inventory chart: {str(e)}")
-            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id,
+                                                    text=f"Ошибка при генерации графика для продукта: {str(e)}")
 
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
@@ -224,6 +229,7 @@ class TelegramBot:
     def run(self):
         logging.debug("Starting bot polling.")
         self.application.run_polling()
+
 
 if __name__ == "__main__":
     import json
@@ -237,6 +243,7 @@ if __name__ == "__main__":
 
     # Запуск Flask в отдельном потоке и передача объекта bot
     from webapp import WebApp
+
     web_app = WebApp(bot)  # Передаем объект bot
     flask_thread = threading.Thread(target=web_app.run)
     flask_thread.start()
