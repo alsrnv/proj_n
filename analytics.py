@@ -293,8 +293,56 @@ def double_exponential_smoothing(series, alpha, beta, horizon=1):
         result.append(level + trend)
     return list(map(abs, result[-horizon:]))
 
+def generate_predict_chart(data, product_name):
+    """
+    Generates a bar chart for inventory data.
+    
+    Parameters:
+        data (dict): Dictionary with 'Товар' and 'Количество' keys.
+        product_name(str): Name of the product.
+    
+    Returns:
+        str: Path to the saved chart image.
+    """
+    colors = ['red', 'orange', 'yellow', 'green']
 
-def get_cnt_sum(product: str, engine, period: int = 1):
+    # Определение цвета для каждого значения в данных
+    #color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
+
+    if max(data.values()) == 0:
+        color_scale = ['gray' for _ in data.values()]
+    else:
+        color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
+
+    fig = make_subplots(rows=1, cols=len(data), shared_yaxes=True,
+                        subplot_titles=list(data.keys()))
+
+    # Добавляем каждый график в соответствующий подграфик с указанием цвета
+    for i, (date, value) in enumerate(data.items(), start=1):
+        fig.add_trace(go.Bar(x=[date], y=[value], name=date, showlegend=False, marker=dict(color=color_scale[i - 1])),
+                      row=1, col=i)
+
+    # Обновляем макет для лучшей читаемости и добавляем подпись оси Y только к первому подграфику
+    fig.update_yaxes(title_text="Количество", row=1, col=1)
+    fig.update_xaxes(showticklabels=False)  # Убираем подписи на оси X
+
+    # Обновляем оpбщие параметры макета
+    fig.update_layout(
+        height=400,
+        width=800,
+        title_text=f"Прогноз для закупки товара \"{product_name}\"",
+        title_x=0.5  # Центрируем заголовок
+    )
+
+    graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+        fig.write_image(tmp_file.name)
+    tmp_file_path = tmp_file.name
+    # print(tmp_file_path)
+    return tmp_file_path, graph_json
+
+def get_cnt_sum(product: str, engine, period: int = 1, picture = False):
     try:
         query = f"""select * from financial_data where "Счет" = '{product}' and "Обороты за период (Сумма Дебет)" is not NULL"""
         data = pd.read_sql(query, engine)
@@ -319,11 +367,19 @@ def get_cnt_sum(product: str, engine, period: int = 1):
 
         history_cnt = np.asarray(list(bought_cnt.values()))
         history_sum = np.asarray(list(bought_sum.values()))
-
+        # print(history_cnt)
         cnt_to_buy = double_exponential_smoothing(history_cnt, 0.6, 0.4, period)
         sum_to_buy = double_exponential_smoothing(history_sum, 0.6, 0.4, period)
-
-        return list(map(np.ceil, cnt_to_buy)), sum_to_buy
+        
+        if picture:
+            values = {}
+            values['Этот квартал'] = history_sum[-1]
+            for ind, el in enumerate(sum_to_buy):
+                values[f'{ind+1} квартал'] = el
+            # print(values)
+            return generate_predict_chart(values, product)
+        else:
+            return list(map(np.ceil, cnt_to_buy)), sum_to_buy, 
     except Exception as e:
         print(e)
         return -1, -1

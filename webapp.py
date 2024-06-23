@@ -31,6 +31,7 @@ class WebApp:
             products = analytics.get_unique_products()
             return jsonify({'products': products})
 
+
         @self.app.route('/product_selection', methods=['POST'])
         def product_selection():
             data = request.json

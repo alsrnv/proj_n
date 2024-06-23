@@ -302,6 +302,28 @@ class TelegramBot:
             )
         )
 
+    async def predict(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /predict command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+
+        webapp_url = os.getenv('WEBAPP_URL')
+        if not webapp_url:
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
+            return
+
+        if not webapp_url.startswith("https://"):
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
+            return
+
+        await update.message.reply_text(
+            'Для выбора продукта перейдите по ссылке ниже:',
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Выбор продукта", web_app=WebAppInfo(url=f"{webapp_url}/products.html"))]]
+            )
+        )
+
     async def product_selected(self, data):
         user_id = data.get('user_id')
         product_name = data.get('product_name')
