@@ -21,6 +21,7 @@ for handler in logger.handlers:
 
 CHANGE_JSON, FIELD_SELECTION, VALUE_INPUT = range(3)
 
+
 class TelegramBot:
     def __init__(self, config):
         self.config = config
@@ -31,7 +32,6 @@ class TelegramBot:
 
         self.delete_json_file()
 
-        # Add command handlers
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('change_json', self.change_json_start)],
             states={
@@ -50,6 +50,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler('product', self.product))
         self.application.add_handler(CommandHandler('make_json', self.make_json))
         self.application.add_handler(CommandHandler('edit_json', self.edit_json))
+        self.application.add_handler(CommandHandler('make_prediction', self.make_prediction))
         #self.application.add_handler(CommandHandler('change_json', self.change_json_start))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
@@ -59,6 +60,54 @@ class TelegramBot:
 
 
         logging.debug("TelegramBot initialized with config and handlers added.")
+
+
+
+
+    async def make_prediction(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /make_prediction command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+
+        webapp_url = os.getenv('WEBAPP_URL')
+        if not webapp_url:
+            await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
+            return
+
+        await update.message.reply_text(
+            'Для выбора товара и периода прогноза перейдите по ссылке ниже:',
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Сделать прогноз", web_app=WebAppInfo(url=f"{webapp_url}/make_prediction.html"))]]
+            )
+        )
+    async def product_prediction_selected(self, data):
+        user_id = data.get('user_id')
+        product_name = data.get('product_name')
+        image_path = data.get('image_path')
+
+        try:
+            await self.application.bot.send_photo(chat_id=user_id, photo=open(image_path, 'rb'))
+            await self.application.bot.send_message(chat_id=user_id, text=f"Прогноз для продукта {product_name} готов.")
+        except Exception as e:
+            logging.error(f"Failed to send prediction result: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при отправке прогноза: {str(e)}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     async def change_json_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         logging.debug("Starting change_json process.")
@@ -145,15 +194,6 @@ class TelegramBot:
                 logging.error(f"Failed to load JSON: {str(e)}")
                 await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
                 return FIELD_SELECTION
-
-
-
-
-
-
-
-
-
 
 
     async def value_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -281,7 +321,8 @@ class TelegramBot:
             '/make_json - Создает JSON файл с закупкой\n'
             '/login - Авторизация через Keycloak\n'
             '/edit_json - Изменить json в WebView\n'
-            '/change_json - Изменить JSON через диалог'
+            '/change_json - Изменить JSON через диалог\n'
+            '/make_prediction - Сделать прогноз для регулярных товаров'
         )
 
     async def edit_json(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

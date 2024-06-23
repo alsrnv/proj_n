@@ -294,7 +294,41 @@ def double_exponential_smoothing(series, alpha, beta, horizon=1):
     return list(map(abs, result[-horizon:]))
 
 
-def get_cnt_sum(product: str, engine, period: int = 1):
+# def get_cnt_sum(product: str, engine, period: int = 1):
+#     try:
+#         query = f"""select * from financial_data where "Счет" = '{product}' and "Обороты за период (Сумма Дебет)" is not NULL"""
+#         data = pd.read_sql(query, engine)
+#         data = data[data['Код'].isnull() != True]
+#         data = data.fillna(0)
+
+#         if len(data) <= 1:
+#             return -2, -2
+
+#         data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
+#         data['used_sum'] = data['Обороты за период (Сумма Дебет)']
+
+#         bought_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
+#         for ind, row in data.iterrows():
+#             bought_cnt[row['Квартал']] = row['used_cnt']
+#         #     bought_cnt
+
+#         bought_sum = {1: 0, 2: 0, 3: 0, 4: 0}
+#         for ind, row in data.iterrows():
+#             bought_sum[row['Квартал']] = row['used_sum']
+#         #     bought_sum
+
+#         history_cnt = np.asarray(list(bought_cnt.values()))
+#         history_sum = np.asarray(list(bought_sum.values()))
+
+#         cnt_to_buy = double_exponential_smoothing(history_cnt, 0.6, 0.4, period)
+#         sum_to_buy = double_exponential_smoothing(history_sum, 0.6, 0.4, period)
+
+#         return list(map(np.ceil, cnt_to_buy)), sum_to_buy
+#     except Exception as e:
+#         print(e)
+#         return -1, -1
+    
+def get_cnt_sum(product: str, engine, period: int = 1, picture = False):
     try:
         query = f"""select * from financial_data where "Счет" = '{product}' and "Обороты за период (Сумма Дебет)" is not NULL"""
         data = pd.read_sql(query, engine)
@@ -319,14 +353,35 @@ def get_cnt_sum(product: str, engine, period: int = 1):
 
         history_cnt = np.asarray(list(bought_cnt.values()))
         history_sum = np.asarray(list(bought_sum.values()))
-
+        # print(history_cnt)
         cnt_to_buy = double_exponential_smoothing(history_cnt, 0.6, 0.4, period)
         sum_to_buy = double_exponential_smoothing(history_sum, 0.6, 0.4, period)
-
-        return list(map(np.ceil, cnt_to_buy)), sum_to_buy
+        
+        if picture:
+            values = {}
+            values['Этот квартал'] = history_sum[-1]
+            for ind, el in enumerate(sum_to_buy):
+                values[f'{ind+1} квартал'] = el
+            # print(values)
+            return generate_predict_chart(values, product)
+        else:
+            return list(map(np.ceil, cnt_to_buy)), sum_to_buy, 
     except Exception as e:
         print(e)
         return -1, -1
+    
+def all_regular_product_names(engine):
+    query = f'''select "Счет", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Квартал"
+                        from financial_data
+                        where "Код" is not NULL '''
+    financial_data_df = pd.read_sql(query, engine)
+    lst = financial_data_df['Счет'].unique().tolist()
+    lst_regular = []
+    for product_name in lst:
+        df = financial_data_df[financial_data_df['Счет'] == product_name]
+        if (df.groupby('Квартал')['Обороты за период (Кол-во Дебет)'].sum() > 0).sum() >= 2:
+            lst_regular.append(product_name)
+    return lst_regular
 
 def all_regular_product_names(engine):
     query = f'''select "Счет", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Квартал"

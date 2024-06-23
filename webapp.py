@@ -31,6 +31,14 @@ class WebApp:
             products = analytics.get_unique_products()
             return jsonify({'products': products})
 
+        @self.app.route('/get_regular_products')
+        def get_regular_products():
+            logging.debug("Serving regular product list")
+            import analytics
+            engine = analytics.get_database_connection()
+            products = analytics.all_regular_product_names(engine)
+            return jsonify({'products': products})
+
         @self.app.route('/product_selection', methods=['POST'])
         def product_selection():
             data = request.json
@@ -56,6 +64,32 @@ class WebApp:
             except Exception as e:
                 logging.error(f"Exception while notifying Telegram bot: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
+            
+        @self.app.route('/make_prediction.html')
+        def serve_make_prediction_page():
+            logging.debug("Serving make_prediction.html")
+            return send_from_directory('templates', 'make_prediction.html')
+
+        @self.app.route('/product_prediction', methods=['POST'])
+        def product_prediction():
+            data = request.json
+            logging.debug(f"Received prediction request: {data}")
+            product_name = data.get('product_name')
+            period = data.get('period')
+            user_id = data.get('user_id')
+
+            if not product_name or not period or not user_id:
+                logging.error("Missing user_id, product_name, or period")
+                return jsonify({'success': False, 'error': 'Missing user_id, product_name, or period'}), 400
+
+            try:
+                import analytics
+                image_path, graph_json = analytics.get_cnt_sum(product_name, analytics.get_database_connection(), period=int(period), picture=True)
+                asyncio.run(self.bot.product_prediction_selected({'user_id': user_id, 'product_name': product_name, 'image_path': image_path, 'graph_json': graph_json}))
+                return jsonify({'success': True, 'graph_json': graph_json, 'values': analytics.get_cnt_sum(product_name, analytics.get_database_connection(), period=int(period), picture=False)}), 200
+            except Exception as e:
+                logging.error(f"Exception while notifying Telegram bot: {str(e)}")
+                return jsonify({'success': False, 'error': str(e)}), 500
 
         @self.app.route('/edit_json.html')
         def serve_edit_json_page():
@@ -73,18 +107,6 @@ class WebApp:
                 logging.error(f"Failed to load JSON: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
 
-        # @self.app.route('/update_json', methods=['POST'])
-        # def update_json():
-        #     data = request.json
-        #     logging.debug(f"Received JSON update: {data}")
-        #     try:
-        #         with open('final_answer.json', 'w', encoding='utf-8') as json_file:
-        #             json.dump(data, json_file, ensure_ascii=False, indent=4)
-        #         return jsonify({'success': True}), 200
-        #     except Exception as e:
-        #         logging.error(f"Failed to update JSON: {str(e)}")
-        #         return jsonify({'success': False, 'error': str(e)}), 500
-
         @self.app.route('/update_json', methods=['POST'])
         def update_json():
             data = request.json
@@ -98,7 +120,6 @@ class WebApp:
             except Exception as e:
                 logging.error(f"Failed to update JSON: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
-
 
     def run(self):
         logging.debug("Starting Flask server.")

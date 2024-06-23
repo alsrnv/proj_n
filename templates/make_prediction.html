@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Выбор товара и периода прогноза</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: url('background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: #fff;
+        }
+        .container {
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Выберите товар и период прогноза</h1>
+        <form id="predictionForm">
+            <div class="form-group">
+                <label for="productSelect">Товар:</label>
+                <select class="form-control" id="productSelect" required>
+                    <!-- Options will be populated dynamically -->
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="periodInput">Период (кварталы):</label>
+                <input type="number" class="form-control" id="periodInput" min="1" max="4" required>
+            </div>
+            <button type="submit" class="btn btn-success">Сделать прогноз</button>
+        </form>
+    </div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        $(document).ready(function() {
+            $.getJSON('/get_regular_products', function(data) {
+                const products = data.products;
+                const productSelect = $('#productSelect');
+                products.forEach(product => {
+                    productSelect.append(`<option value="${product}">${product}</option>`);
+                });
+            });
+
+            $('#predictionForm').on('submit', function(e) {
+                e.preventDefault();
+                const product = $('#productSelect').val();
+                const period = $('#periodInput').val();
+                const user_id = tg.initDataUnsafe.user.id;
+
+                $.ajax({
+                    url: '/product_prediction',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ product_name: product, period: period, user_id: user_id }),
+                    success: function(response) {
+                        if (response.success) {
+                            alert('Прогноз успешно создан!');
+                            tg.close();
+                        } else {
+                            alert('Ошибка при создании прогноза: ' + response.error);
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
