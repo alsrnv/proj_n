@@ -1,5 +1,4 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+
 from keycloak import KeycloakOpenID
 import os
 import logging
@@ -7,7 +6,19 @@ import json
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
-logging.basicConfig(level=logging.DEBUG)
+# Устанавливаем базовый уровень логирования на DEBUG
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Функция для фильтрации логов, чтобы отображались только DEBUG сообщения
+class DebugOnlyFilter(logging.Filter):
+    def filter(self, record):
+        return record.levelno == logging.DEBUG
+
+# Получаем основной логгер и добавляем к нему фильтр
+logger = logging.getLogger()
+for handler in logger.handlers:
+    handler.addFilter(DebugOnlyFilter())
+
 CHANGE_JSON, FIELD_SELECTION, VALUE_INPUT = range(3)
 
 class TelegramBot:
@@ -21,17 +32,6 @@ class TelegramBot:
         self.delete_json_file()
 
         # Add command handlers
-        self.application.add_handler(CommandHandler('start', self.start))
-        self.application.add_handler(CommandHandler('info', self.info))
-        self.application.add_handler(CommandHandler('inventory', self.inventory))
-        self.application.add_handler(CommandHandler('stats', self.stats))
-        self.application.add_handler(CommandHandler('login', self.login))
-        self.application.add_handler(CommandHandler('product', self.product))
-        self.application.add_handler(CommandHandler('make_json', self.make_json))
-        self.application.add_handler(CommandHandler('edit_json', self.edit_json))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-
-        # Conversation handler for changing JSON
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('change_json', self.change_json_start)],
             states={
@@ -42,13 +42,31 @@ class TelegramBot:
         )
         self.application.add_handler(conv_handler)
 
+        self.application.add_handler(CommandHandler('start', self.start))
+        self.application.add_handler(CommandHandler('info', self.info))
+        self.application.add_handler(CommandHandler('inventory', self.inventory))
+        self.application.add_handler(CommandHandler('stats', self.stats))
+        self.application.add_handler(CommandHandler('login', self.login))
+        self.application.add_handler(CommandHandler('product', self.product))
+        self.application.add_handler(CommandHandler('make_json', self.make_json))
+        self.application.add_handler(CommandHandler('edit_json', self.edit_json))
+        #self.application.add_handler(CommandHandler('change_json', self.change_json_start))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+
+
+
+
+
+
         logging.debug("TelegramBot initialized with config and handlers added.")
 
     async def change_json_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        logging.debug("Starting change_json process.")
+        
         if not self.is_user_authorized(update):
             await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return ConversationHandler.END
-        
+
         if not os.path.exists('final_answer.json'):
             await update.message.reply_text('Файл JSON не найден. Пожалуйста, сначала сформируйте файл с помощью команды /make_json.')
             return ConversationHandler.END
@@ -56,69 +74,104 @@ class TelegramBot:
         try:
             with open('final_answer.json', 'r', encoding='utf-8') as json_file:
                 json_data = json.load(json_file)
-                json_structure = json.dumps(json_data, indent=4, ensure_ascii=False)
-                if len(json_structure) > 4096:  # Проверка длины сообщения
-                    json_structure = json_structure[:4093] + '...'
-                await update.message.reply_text(f'Текущая структура JSON файла:\n{json_structure}')
+                logging.debug(f"Loaded JSON data: {json_data}")
         except Exception as e:
             logging.error(f"Failed to load JSON: {str(e)}")
             await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+            return ConversationHandler.END
+
+        keys = list(json_data.keys())
+        logging.debug(f"Available fields in JSON: {keys}")
+
+        if not keys:
+            await update.message.reply_text('В JSON файле нет доступных полей для изменения.')
+            return ConversationHandler.END
 
         await update.message.reply_text(
-            'Что вы хотите изменить в JSON файле? Выберите одно из полей: id, lotEntityId, CustomerId, rows',
-            reply_markup=ReplyKeyboardMarkup([['id', 'lotEntityId', 'CustomerId', 'rows']], one_time_keyboard=True)
+            'Что вы хотите изменить в JSON файле? Выберите одно из полей:',
+            reply_markup=ReplyKeyboardMarkup([keys], one_time_keyboard=True)
         )
+        logging.debug("Prompted user to select a field.")
         return FIELD_SELECTION
 
 
     async def field_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        logging.debug("Entering field_selection state.")
+        logging.debug(f"Update received: {update}")
+
         field = update.message.text
         context.user_data['field'] = field
+
+        logging.debug(f"Field selected by user: {field}")
 
         try:
             with open('final_answer.json', 'r', encoding='utf-8') as json_file:
                 json_data = json.load(json_file)
+                logging.debug(f"Loaded JSON data: {json_data}")
+
                 if field in json_data:
                     field_value = json.dumps(json_data[field], indent=4, ensure_ascii=False)
                     if len(field_value) > 4096:  # Проверка длины сообщения
                         field_value = field_value[:4093] + '...'
                     await update.message.reply_text(f'Текущее значение поля {field}:\n{field_value}')
+                    logging.debug(f"Field value sent to user: {field_value}")
                 else:
                     await update.message.reply_text(f'Поле {field} не найдено в JSON файле. Попробуйте снова.')
+                    logging.debug(f"Field {field} not found in JSON.")
                     return FIELD_SELECTION
-        except Exception as e:
-            logging.error(f"Failed to load JSON: {str(e)}")
+        except FileNotFoundError:
+            logging.error("JSON file not found.")
+            await update.message.reply_text('Файл JSON не найден. Пожалуйста, сначала сформируйте файл с помощью команды /make_json.')
+            return ConversationHandler.END
+        except json.JSONDecodeError as e:
+            logging.error(f"Failed to decode JSON: {str(e)}")
             await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+            return ConversationHandler.END
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+            await update.message.reply_text(f'Произошла неожиданная ошибка: {str(e)}')
+            return ConversationHandler.END
 
         await update.message.reply_text(f'Вы выбрали {field}. Теперь введите новое значение:', reply_markup=ReplyKeyboardRemove())
+        logging.debug(f"Prompted user to input new value for field {field}.")
         return VALUE_INPUT
-    
-    
-    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        await update.message.reply_text('Операция отменена.', reply_markup=ReplyKeyboardRemove())
-        return ConversationHandler.END
-
 
 
     async def value_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        field = context.user_data['field']
+        field = context.user_data.get('field')
         new_value = update.message.text
+
+        logging.debug(f"User input new value for field {field}: {new_value}")
 
         try:
             with open('final_answer.json', 'r', encoding='utf-8') as json_file:
                 json_data = json.load(json_file)
-            
+                logging.debug(f"Loaded JSON data for updating: {json_data}")
+
             if field in json_data:
                 json_data[field] = new_value
             elif field == 'rows':
-                json_data[field].append(json.loads(new_value))
+                try:
+                    new_row = json.loads(new_value)
+                    if isinstance(new_row, dict):
+                        json_data[field].append(new_row)
+                    else:
+                        await update.message.reply_text('Неверный формат для добавления в "rows". Ожидается объект JSON.')
+                        logging.debug(f"Invalid format for rows: {new_value}")
+                        return VALUE_INPUT
+                except json.JSONDecodeError:
+                    await update.message.reply_text('Неверный формат JSON. Попробуйте снова.')
+                    logging.debug(f"JSON decode error for new value: {new_value}")
+                    return VALUE_INPUT
             else:
                 await update.message.reply_text('Неверное поле. Попробуйте снова.')
+                logging.debug(f"Invalid field: {field}")
                 return FIELD_SELECTION
 
             with open('final_answer.json', 'w', encoding='utf-8') as json_file:
                 json.dump(json_data, json_file, ensure_ascii=False, indent=4)
-            
+                logging.debug(f"JSON file updated successfully: {json_data}")
+
             await update.message.reply_text('JSON файл успешно обновлен.', reply_markup=ReplyKeyboardRemove())
             await self.send_json_file(chat_id=update.message.chat_id, context=context)
         except Exception as e:
@@ -126,6 +179,13 @@ class TelegramBot:
             await update.message.reply_text(f'Ошибка при обновлении JSON: {str(e)}', reply_markup=ReplyKeyboardRemove())
 
         return ConversationHandler.END
+
+
+
+
+
+
+
 
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -398,7 +458,10 @@ class TelegramBot:
         )
 
 
-
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.reply_text('Отмена операции.', reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+    
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
         return self.authorized_users.get(user_id, False)
