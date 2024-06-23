@@ -3,7 +3,7 @@ from keycloak import KeycloakOpenID
 import os
 import logging
 import json
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
 # Устанавливаем базовый уровень логирования на DEBUG
@@ -80,6 +80,7 @@ class TelegramBot:
             await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
             return ConversationHandler.END
 
+        # Получаем ключи из JSON и отображаем пользователю для выбора
         keys = list(json_data.keys())
         logging.debug(f"Available fields in JSON: {keys}")
 
@@ -97,88 +98,160 @@ class TelegramBot:
 
     async def field_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         logging.debug("Entering field_selection state.")
-        logging.debug(f"Update received: {update}")
-
         field = update.message.text
         context.user_data['field'] = field
+        logging.debug(f"User selected field: {field}")
 
-        logging.debug(f"Field selected by user: {field}")
+        if field == 'rows':
+            try:
+                with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                    json_data = json.load(json_file)
+                    rows = json_data.get('rows', [])
+                    if not rows:
+                        await update.message.reply_text('Поле rows пустое. Попробуйте снова.')
+                        return FIELD_SELECTION
 
-        try:
-            with open('final_answer.json', 'r', encoding='utf-8') as json_file:
-                json_data = json.load(json_file)
-                logging.debug(f"Loaded JSON data: {json_data}")
+                    row_options = [f"Row {i + 1}: {row['spgzCharacteristics'][0]['characteristicName']}" for i, row in enumerate(rows)]
+                    row_options_keyboard = [[KeyboardButton(row_option)] for row_option in row_options]
+                    await update.message.reply_text(
+                        'Выберите строку для изменения:',
+                        reply_markup=ReplyKeyboardMarkup(row_options_keyboard, one_time_keyboard=True)
+                    )
+                    logging.debug(f"Row options sent to user: {row_options}")
+                    return VALUE_INPUT
+            except Exception as e:
+                logging.error(f"Failed to load JSON: {str(e)}")
+                await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+                return FIELD_SELECTION
+        else:
+            try:
+                with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                    json_data = json.load(json_file)
 
-                if field in json_data:
-                    field_value = json.dumps(json_data[field], indent=4, ensure_ascii=False)
-                    if len(field_value) > 4096:  # Проверка длины сообщения
-                        field_value = field_value[:4093] + '...'
-                    await update.message.reply_text(f'Текущее значение поля {field}:\n{field_value}')
-                    logging.debug(f"Field value sent to user: {field_value}")
-                else:
-                    await update.message.reply_text(f'Поле {field} не найдено в JSON файле. Попробуйте снова.')
-                    logging.debug(f"Field {field} not found in JSON.")
-                    return FIELD_SELECTION
-        except FileNotFoundError:
-            logging.error("JSON file not found.")
-            await update.message.reply_text('Файл JSON не найден. Пожалуйста, сначала сформируйте файл с помощью команды /make_json.')
-            return ConversationHandler.END
-        except json.JSONDecodeError as e:
-            logging.error(f"Failed to decode JSON: {str(e)}")
-            await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
-            return ConversationHandler.END
-        except Exception as e:
-            logging.error(f"Unexpected error: {str(e)}")
-            await update.message.reply_text(f'Произошла неожиданная ошибка: {str(e)}')
-            return ConversationHandler.END
+                    if field in json_data:
+                        field_value = json.dumps(json_data[field], indent=4, ensure_ascii=False)
+                        if len(field_value) > 4096:  # Проверка длины сообщения
+                            field_value = field_value[:4093] + '...'
+                        await update.message.reply_text(f'Текущее значение поля {field}:\n{field_value}')
+                        logging.debug(f"Field value sent to user: {field_value}")
+                    else:
+                        await update.message.reply_text(f'Поле {field} не найдено в JSON файле. Попробуйте снова.')
+                        logging.debug(f"Field {field} not found in JSON.")
+                        return FIELD_SELECTION
+                await update.message.reply_text(f'Вы выбрали {field}. Теперь введите новое значение:', reply_markup=ReplyKeyboardRemove())
+                logging.debug(f"Prompted user to input new value for field {field}.")
+                return VALUE_INPUT
+            except Exception as e:
+                logging.error(f"Failed to load JSON: {str(e)}")
+                await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+                return FIELD_SELECTION
 
-        await update.message.reply_text(f'Вы выбрали {field}. Теперь введите новое значение:', reply_markup=ReplyKeyboardRemove())
-        logging.debug(f"Prompted user to input new value for field {field}.")
-        return VALUE_INPUT
+
+
+
+
+
+
+
+
 
 
     async def value_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         field = context.user_data.get('field')
-        new_value = update.message.text
+        user_input = update.message.text
+        logging.debug(f"User input in value_input: {user_input}")
 
-        logging.debug(f"User input new value for field {field}: {new_value}")
-
-        try:
-            with open('final_answer.json', 'r', encoding='utf-8') as json_file:
-                json_data = json.load(json_file)
-                logging.debug(f"Loaded JSON data for updating: {json_data}")
-
-            if field in json_data:
-                json_data[field] = new_value
-            elif field == 'rows':
+        if field == 'rows':
+            if 'Row' in user_input:
                 try:
-                    new_row = json.loads(new_value)
-                    if isinstance(new_row, dict):
-                        json_data[field].append(new_row)
+                    logging.debug(f"Parsing row index from user input: {user_input}")
+                    row_number_part = user_input.split(':')[0].strip()
+                    if 'Row' in row_number_part:
+                        row_index = int(row_number_part.replace('Row', '').strip()) - 1
+                        context.user_data['row_index'] = row_index
+                        logging.debug(f"User selected row index: {row_index}")
                     else:
-                        await update.message.reply_text('Неверный формат для добавления в "rows". Ожидается объект JSON.')
-                        logging.debug(f"Invalid format for rows: {new_value}")
-                        return VALUE_INPUT
-                except json.JSONDecodeError:
-                    await update.message.reply_text('Неверный формат JSON. Попробуйте снова.')
-                    logging.debug(f"JSON decode error for new value: {new_value}")
+                        raise ValueError("No 'Row' keyword found in user input")
+                except Exception as e:
+                    logging.error(f"Error parsing row index: {str(e)}")
+                    await update.message.reply_text('Ошибка при разборе индекса строки. Попробуйте снова.')
                     return VALUE_INPUT
+
+                try:
+                    with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                        json_data = json.load(json_file)
+                        row_data = json_data['rows'][row_index]
+                        row_data_str = json.dumps(row_data, indent=4, ensure_ascii=False)
+                        await update.message.reply_text(
+                            f'Текущие данные для строки {row_index + 1}:\n{row_data_str}\n\nСкопируйте, измените и отправьте обратно.'
+                        )
+                        context.user_data['expecting_update'] = True
+                        logging.debug(f"Sent row data to user for update: {row_data_str}")
+                        return VALUE_INPUT
+                except Exception as e:
+                    logging.error(f"Failed to load JSON: {str(e)}")
+                    await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+                    return ConversationHandler.END
             else:
-                await update.message.reply_text('Неверное поле. Попробуйте снова.')
-                logging.debug(f"Invalid field: {field}")
-                return FIELD_SELECTION
+                if context.user_data.get('expecting_update'):
+                    try:
+                        logging.debug(f"Parsing new row value from user input: {user_input}")
+                        new_row_value = json.loads(user_input)
+                        row_index = context.user_data.get('row_index')
+                        with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                            json_data = json.load(json_file)
+                            if isinstance(new_row_value, dict):
+                                json_data['rows'][row_index] = new_row_value
+                            else:
+                                await update.message.reply_text('Неверный формат для обновления "rows". Ожидается объект JSON.')
+                                logging.debug("Invalid format for row update.")
+                                return VALUE_INPUT
+                        with open('final_answer.json', 'w', encoding='utf-8') as json_file:
+                            json.dump(json_data, json_file, ensure_ascii=False, indent=4)
+                        await update.message.reply_text('Строка успешно обновлена.', reply_markup=ReplyKeyboardRemove())
+                        await self.send_json_file(chat_id=update.message.chat_id, context=context)
+                        context.user_data['expecting_update'] = False
+                        logging.debug(f"Row {row_index + 1} updated with new data: {new_row_value}")
+                        return ConversationHandler.END
+                    except json.JSONDecodeError:
+                        await update.message.reply_text('Неверный формат JSON. Попробуйте снова.')
+                        logging.debug("JSON decode error.")
+                        return VALUE_INPUT
+                    except Exception as e:
+                        logging.error(f"Failed to update JSON: {str(e)}")
+                        await update.message.reply_text(f'Ошибка при обновлении JSON: {str(e)}', reply_markup=ReplyKeyboardRemove())
+                        return ConversationHandler.END
+                else:
+                    await update.message.reply_text('Неверное действие. Попробуйте снова.')
+                    return VALUE_INPUT
+        else:
+            try:
+                with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                    json_data = json.load(json_file)
+                    json_data[field] = user_input
+                with open('final_answer.json', 'w', encoding='utf-8') as json_file:
+                    json.dump(json_data, json_file, ensure_ascii=False, indent=4)
+                await update.message.reply_text('JSON файл успешно обновлен.', reply_markup=ReplyKeyboardRemove())
+                await self.send_json_file(chat_id=update.message.chat_id, context=context)
+                return ConversationHandler.END
+            except Exception as e:
+                logging.error(f"Failed to update JSON: {str(e)}")
+                await update.message.reply_text(f'Ошибка при обновлении JSON: {str(e)}', reply_markup=ReplyKeyboardRemove())
+                return ConversationHandler.END
 
-            with open('final_answer.json', 'w', encoding='utf-8') as json_file:
-                json.dump(json_data, json_file, ensure_ascii=False, indent=4)
-                logging.debug(f"JSON file updated successfully: {json_data}")
 
-            await update.message.reply_text('JSON файл успешно обновлен.', reply_markup=ReplyKeyboardRemove())
-            await self.send_json_file(chat_id=update.message.chat_id, context=context)
-        except Exception as e:
-            logging.error(f"Failed to update JSON: {str(e)}")
-            await update.message.reply_text(f'Ошибка при обновлении JSON: {str(e)}', reply_markup=ReplyKeyboardRemove())
 
-        return ConversationHandler.END
+
+
+
+
+
+
+
+
+
+
+
 
 
 

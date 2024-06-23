@@ -1,7 +1,7 @@
 {
     "id": 1,
-    "lotEntityId": "2322",
-    "CustomerId": "106876290",
+    "lotEntityId": 0,
+    "CustomerId": "-888",
     "rows": [
         {
             "DeliverySchedule": {
@@ -9,7 +9,7 @@
                     "end_date": "31-03-2023",
                     "start_date": "01-01-2023"
                 },
-                "deliveryAmount": 2.0,
+                "deliveryAmount": 3.0,
                 "deliveryConditions": "",
                 "year": 2023
             },
@@ -27,7 +27,7 @@
                     "characteristicName": "Установка информационной наклейки, м2",
                     "characteristicSpgzEnums": [
                         {
-                            "value": 16024896
+                            "value": -80808089
                         }
                     ],
                     "conditionTypeId": 0,
