@@ -4,8 +4,11 @@ from keycloak import KeycloakOpenID
 import os
 import logging
 import json
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
 logging.basicConfig(level=logging.DEBUG)
+CHANGE_JSON, FIELD_SELECTION, VALUE_INPUT = range(3)
 
 class TelegramBot:
     def __init__(self, config):
@@ -14,6 +17,8 @@ class TelegramBot:
         self.authorized_users = {}
         self.pending_auth = {}
         self.counter = 1  # Добавляем счетчик для JSON ID
+
+        self.delete_json_file()
 
         # Add command handlers
         self.application.add_handler(CommandHandler('start', self.start))
@@ -26,7 +31,102 @@ class TelegramBot:
         self.application.add_handler(CommandHandler('edit_json', self.edit_json))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
+        # Conversation handler for changing JSON
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('change_json', self.change_json_start)],
+            states={
+                FIELD_SELECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.field_selection)],
+                VALUE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.value_input)],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)]
+        )
+        self.application.add_handler(conv_handler)
+
         logging.debug("TelegramBot initialized with config and handlers added.")
+
+    async def change_json_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return ConversationHandler.END
+        
+        if not os.path.exists('final_answer.json'):
+            await update.message.reply_text('Файл JSON не найден. Пожалуйста, сначала сформируйте файл с помощью команды /make_json.')
+            return ConversationHandler.END
+
+        try:
+            with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                json_data = json.load(json_file)
+                json_structure = json.dumps(json_data, indent=4, ensure_ascii=False)
+                if len(json_structure) > 4096:  # Проверка длины сообщения
+                    json_structure = json_structure[:4093] + '...'
+                await update.message.reply_text(f'Текущая структура JSON файла:\n{json_structure}')
+        except Exception as e:
+            logging.error(f"Failed to load JSON: {str(e)}")
+            await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+
+        await update.message.reply_text(
+            'Что вы хотите изменить в JSON файле? Выберите одно из полей: id, lotEntityId, CustomerId, rows',
+            reply_markup=ReplyKeyboardMarkup([['id', 'lotEntityId', 'CustomerId', 'rows']], one_time_keyboard=True)
+        )
+        return FIELD_SELECTION
+
+
+    async def field_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        field = update.message.text
+        context.user_data['field'] = field
+
+        try:
+            with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                json_data = json.load(json_file)
+                if field in json_data:
+                    field_value = json.dumps(json_data[field], indent=4, ensure_ascii=False)
+                    if len(field_value) > 4096:  # Проверка длины сообщения
+                        field_value = field_value[:4093] + '...'
+                    await update.message.reply_text(f'Текущее значение поля {field}:\n{field_value}')
+                else:
+                    await update.message.reply_text(f'Поле {field} не найдено в JSON файле. Попробуйте снова.')
+                    return FIELD_SELECTION
+        except Exception as e:
+            logging.error(f"Failed to load JSON: {str(e)}")
+            await update.message.reply_text(f'Ошибка при загрузке JSON: {str(e)}')
+
+        await update.message.reply_text(f'Вы выбрали {field}. Теперь введите новое значение:', reply_markup=ReplyKeyboardRemove())
+        return VALUE_INPUT
+    
+    
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.reply_text('Операция отменена.', reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+
+
+
+    async def value_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        field = context.user_data['field']
+        new_value = update.message.text
+
+        try:
+            with open('final_answer.json', 'r', encoding='utf-8') as json_file:
+                json_data = json.load(json_file)
+            
+            if field in json_data:
+                json_data[field] = new_value
+            elif field == 'rows':
+                json_data[field].append(json.loads(new_value))
+            else:
+                await update.message.reply_text('Неверное поле. Попробуйте снова.')
+                return FIELD_SELECTION
+
+            with open('final_answer.json', 'w', encoding='utf-8') as json_file:
+                json.dump(json_data, json_file, ensure_ascii=False, indent=4)
+            
+            await update.message.reply_text('JSON файл успешно обновлен.', reply_markup=ReplyKeyboardRemove())
+            await self.send_json_file(chat_id=update.message.chat_id, context=context)
+        except Exception as e:
+            logging.error(f"Failed to update JSON: {str(e)}")
+            await update.message.reply_text(f'Ошибка при обновлении JSON: {str(e)}', reply_markup=ReplyKeyboardRemove())
+
+        return ConversationHandler.END
+
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /start command.")
@@ -47,13 +147,18 @@ class TelegramBot:
             '/product - Выбор продукта для отображения складских остатков\n'
             '/make_json - Создает JSON файл с закупкой\n'
             '/login - Авторизация через Keycloak\n'
-            '/edit_json - Изменить json'
+            '/edit_json - Изменить json в WebView\n'
+            '/change_json - Изменить JSON через диалог'
         )
 
     async def edit_json(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /edit_json command.")
         if not self.is_user_authorized(update):
             await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+        
+        if not os.path.exists('final_answer.json'):
+            await update.message.reply_text('Файл JSON не найден. Пожалуйста, сначала сформируйте файл с помощью команды /make_json.')
             return
 
         webapp_url = os.getenv('WEBAPP_URL')
@@ -71,6 +176,29 @@ class TelegramBot:
                 [[InlineKeyboardButton("Редактировать JSON", web_app=WebAppInfo(url=f"{webapp_url}/edit_json.html"))]]
             )
         )
+
+    async def product_selected(self, data):
+        user_id = data.get('user_id')
+        product_name = data.get('product_name')
+        image_path = data.get('image_path')
+        graph_json = data.get('graph_json')
+
+        import analytics
+        try:
+            await self.application.bot.send_photo(chat_id=user_id, photo=open(image_path, 'rb'))
+            values = analytics.history_remains_for_product(product_name, analytics.get_database_connection())
+            values_text = '\n'.join([f'{date}: {value}' for date, value in values.items()])
+            await self.application.bot.send_message(chat_id=user_id, text=f"Остатки для продукта {product_name}:\n{values_text}")
+        except ValueError as e:
+            logging.error(f"No data for product: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Нет данных для продукта: {str(e)}")
+        except RuntimeError as e:
+            logging.error(f"SQL execution error: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при выполнении SQL запроса: {str(e)}")
+        except Exception as e:
+            logging.error(f"Failed to generate inventory chart: {str(e)}")
+            await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при генерации графика для продукта: {str(e)}")
+
 
     async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.debug("Received /login command.")
@@ -199,6 +327,7 @@ class TelegramBot:
         if not self.is_user_authorized(update):
             await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
             return
+        await update.message.reply_text('Формирование JSON файла. Пожалуйста, подождите...')
 
         import analytics
         engine = analytics.get_database_connection()
@@ -212,7 +341,8 @@ class TelegramBot:
         final_answer['rows'] = []
         for product_name in products:
             cnt_to_buy, sum_to_buy = analytics.get_cnt_sum(product_name, engine)
-            final_answer['rows'].append(analytics.make_one_row(product_name, cnt_to_buy[0], sum_to_buy[0], engine))
+            if isinstance(cnt_to_buy, list) and isinstance(sum_to_buy, list) and cnt_to_buy and sum_to_buy:
+                final_answer['rows'].append(analytics.make_one_row(product_name, cnt_to_buy[0], sum_to_buy[0], engine))
 
         tmp_json_filename = 'final_answer.json'
         try:
@@ -237,6 +367,7 @@ class TelegramBot:
 
         self.counter += 1
 
+
     async def send_json_file(self, chat_id, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             tmp_json_filename = 'final_answer.json'
@@ -248,10 +379,40 @@ class TelegramBot:
         except Exception as e:
             logging.error(f"Error while sending JSON file: {str(e)}")
 
+    async def inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.debug("Received /inventory command.")
+        if not self.is_user_authorized(update):
+            await update.message.reply_text('Сначала необходимо авторизоваться с помощью команды /login.')
+            return
+
+        import analytics
+        engine = analytics.get_database_connection()
+        products = analytics.get_unique_products()
+
+        if not products:
+            await update.message.reply_text('Нет доступных продуктов.')
+            return
+
+        await update.message.reply_text(
+            'Список доступных продуктов:\n' + '\n'.join(products)
+        )
+
+
 
     def is_user_authorized(self, update: Update) -> bool:
         user_id = update.message.from_user.id
         return self.authorized_users.get(user_id, False)
+    
+    def delete_json_file(self):
+        try:
+            if os.path.exists('final_answer.json'):
+                os.remove('final_answer.json')
+                logging.debug("Existing JSON file deleted.")
+            else:
+                logging.debug("No JSON file found to delete.")
+        except Exception as e:
+            logging.error(f"Error while deleting JSON file: {str(e)}")
+
 
     def run(self):
         logging.debug("Starting bot polling.")
