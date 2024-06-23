@@ -299,9 +299,7 @@ class TelegramBot:
             await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
             return
 
-        if not webapp_url.startswith("https://"):
-            await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
-            return
+
 
         await update.message.reply_text(
             'Для редактирования JSON файла перейдите по ссылке ниже:',
@@ -424,9 +422,7 @@ class TelegramBot:
             await update.message.reply_text('Ошибка конфигурации: URL для WebApp не установлен.')
             return
 
-        if not webapp_url.startswith("https://"):
-            await update.message.reply_text('Ошибка конфигурации: URL для WebApp должен начинаться с "https://".')
-            return
+
 
         await update.message.reply_text(
             'Для выбора продукта перейдите по ссылке ниже:',
