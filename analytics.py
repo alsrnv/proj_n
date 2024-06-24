@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from sqlalchemy import create_engine
+import kaleido
 import plotly.express as px
 import tempfile
 from datetime import datetime, timedelta
@@ -13,7 +14,10 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+import logging
 
+# Установим базовый уровень логирования
+logging.basicConfig(level=logging.DEBUG)
 
 
 
@@ -184,9 +188,6 @@ def generate_inventory_chart(data, product_name):
     """
     colors = ['red', 'orange', 'yellow', 'green']
 
-    # Определение цвета для каждого значения в данных
-    #color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
-
     if max(data.values()) == 0:
         color_scale = ['gray' for _ in data.values()]
     else:
@@ -195,30 +196,31 @@ def generate_inventory_chart(data, product_name):
     fig = make_subplots(rows=1, cols=len(data), shared_yaxes=True,
                         subplot_titles=list(data.keys()))
 
-    # Добавляем каждый график в соответствующий подграфик с указанием цвета
     for i, (date, value) in enumerate(data.items(), start=1):
         fig.add_trace(go.Bar(x=[date], y=[value], name=date, showlegend=False, marker=dict(color=color_scale[i - 1])),
                       row=1, col=i)
 
-    # Обновляем макет для лучшей читаемости и добавляем подпись оси Y только к первому подграфику
     fig.update_yaxes(title_text="Количество", row=1, col=1)
-    fig.update_xaxes(showticklabels=False)  # Убираем подписи на оси X
+    fig.update_xaxes(showticklabels=False)
 
-    # Обновляем общие параметры макета
     fig.update_layout(
         height=400,
         width=800,
         title_text=f"Остаток {product_name}",
-        title_x=0.5  # Центрируем заголовок
+        title_x=0.5
     )
 
     graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
         fig.write_image(tmp_file.name)
-    tmp_file_path = tmp_file.name
+        tmp_file_path = tmp_file.name
+
+    if not os.path.exists(tmp_file_path):
+        raise FileNotFoundError(f"Файл графика не создан: {tmp_file_path}")
 
     return tmp_file_path, graph_json
+
 
 def generate_inventory_for_product(product_name):
     engine = get_database_connection()
@@ -327,6 +329,49 @@ def double_exponential_smoothing(series, alpha, beta, horizon=1):
 #     except Exception as e:
 #         print(e)
 #         return -1, -1
+
+
+
+def generate_predict_chart(data, product_name):
+    logging.debug("Начало генерации графика для продукта: %s", product_name)
+    try:
+        colors = ['red', 'orange', 'yellow', 'green']
+        if max(data.values()) == 0:
+            color_scale = ['gray' for _ in data.values()]
+        else:
+            color_scale = [colors[int(value / max(data.values()) * (len(colors) - 1))] for value in data.values()]
+
+        fig = make_subplots(rows=1, cols=len(data), shared_yaxes=True, subplot_titles=list(data.keys()))
+        for i, (date, value) in enumerate(data.items(), start=1):
+            fig.add_trace(go.Bar(x=[date], y=[value], name=date, showlegend=False, marker=dict(color=color_scale[i - 1])),
+                          row=1, col=i)
+
+        fig.update_yaxes(title_text="Количество", row=1, col=1)
+        fig.update_xaxes(showticklabels=False)
+
+        fig.update_layout(
+            height=400,
+            width=800,
+            title_text=f"Прогноз для закупки товара \"{product_name}\"",
+            title_x=0.5
+        )
+
+        graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+            fig.write_image(tmp_file.name)
+            tmp_file_path = tmp_file.name
+
+        logging.debug("График успешно создан и сохранен в файл: %s", tmp_file_path)
+
+        if not os.path.exists(tmp_file_path):
+            raise FileNotFoundError(f"Файл графика не создан: {tmp_file_path}")
+
+        return tmp_file_path, graph_json
+
+    except Exception as e:
+        logging.error(f"Ошибка при создании графика: {str(e)}")
+        return -1, -1
     
 def get_cnt_sum(product: str, engine, period: int = 1, picture = False):
     try:
@@ -335,8 +380,9 @@ def get_cnt_sum(product: str, engine, period: int = 1, picture = False):
         data = data[data['Код'].isnull() != True]
         data = data.fillna(0)
 
-        if len(data) <= 1:
-            return -2, -2
+        # if len(data) <= 1:
+        #     logging.warning(f"Недостаточно данных для продукта: {product}")
+        #     return -2, -2
 
         data['used_cnt'] = data['Обороты за период (Кол-во Дебет)']
         data['used_sum'] = data['Обороты за период (Сумма Дебет)']
@@ -344,44 +390,30 @@ def get_cnt_sum(product: str, engine, period: int = 1, picture = False):
         bought_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
         for ind, row in data.iterrows():
             bought_cnt[row['Квартал']] = row['used_cnt']
-        #     bought_cnt
 
         bought_sum = {1: 0, 2: 0, 3: 0, 4: 0}
         for ind, row in data.iterrows():
             bought_sum[row['Квартал']] = row['used_sum']
-        #     bought_sum
 
         history_cnt = np.asarray(list(bought_cnt.values()))
         history_sum = np.asarray(list(bought_sum.values()))
-        # print(history_cnt)
+
         cnt_to_buy = double_exponential_smoothing(history_cnt, 0.6, 0.4, period)
         sum_to_buy = double_exponential_smoothing(history_sum, 0.6, 0.4, period)
         
         if picture:
-            values = {}
-            values['Этот квартал'] = history_sum[-1]
+            values = {'Этот квартал': history_sum[-1]}
             for ind, el in enumerate(sum_to_buy):
                 values[f'{ind+1} квартал'] = el
-            # print(values)
+            logging.debug("Генерация графика прогноза для продукта: %s", product)
             return generate_predict_chart(values, product)
         else:
-            return list(map(np.ceil, cnt_to_buy)), sum_to_buy, 
+            return list(map(np.ceil, cnt_to_buy)), sum_to_buy
+
     except Exception as e:
-        print(e)
+        logging.error(f"Ошибка при вычислении прогноза: {str(e)}")
         return -1, -1
     
-def all_regular_product_names(engine):
-    query = f'''select "Счет", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Квартал"
-                        from financial_data
-                        where "Код" is not NULL '''
-    financial_data_df = pd.read_sql(query, engine)
-    lst = financial_data_df['Счет'].unique().tolist()
-    lst_regular = []
-    for product_name in lst:
-        df = financial_data_df[financial_data_df['Счет'] == product_name]
-        if (df.groupby('Квартал')['Обороты за период (Кол-во Дебет)'].sum() > 0).sum() >= 2:
-            lst_regular.append(product_name)
-    return lst_regular
 
 def all_regular_product_names(engine):
     query = f'''select "Счет", "Обороты за период (Кол-во Дебет)", "Обороты за период (Кол-во Кредит)", "Квартал"

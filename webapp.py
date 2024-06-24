@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, after_this_request
 import os
 import logging
 import requests
@@ -13,7 +13,13 @@ class WebApp:
         self.setup_routes()
         self.latest_json = None  # Сохраняем последний JSON для редактирования
 
+    def add_ngrok_header(self, response):
+        response.headers['ngrok-skip-browser-warning'] = 'true'
+        return response
+
     def setup_routes(self):
+        self.app.after_request(self.add_ngrok_header)
+
         @self.app.route('/login.html')
         def serve_login_page():
             logging.debug("Serving login.html")

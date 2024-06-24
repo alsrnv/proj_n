@@ -81,17 +81,23 @@ class TelegramBot:
                 [[InlineKeyboardButton("Сделать прогноз", web_app=WebAppInfo(url=f"{webapp_url}/make_prediction.html"))]]
             )
         )
+
+
     async def product_prediction_selected(self, data):
         user_id = data.get('user_id')
         product_name = data.get('product_name')
         image_path = data.get('image_path')
 
         try:
-            await self.application.bot.send_photo(chat_id=user_id, photo=open(image_path, 'rb'))
-            await self.application.bot.send_message(chat_id=user_id, text=f"Прогноз для продукта {product_name} готов.")
+            if os.path.exists(image_path):
+                await self.application.bot.send_photo(chat_id=user_id, photo=open(image_path, 'rb'))
+                await self.application.bot.send_message(chat_id=user_id, text=f"Прогноз для продукта {product_name} готов.")
+            else:
+                raise FileNotFoundError(f"Файл {image_path} не найден.")
         except Exception as e:
             logging.error(f"Failed to send prediction result: {str(e)}")
             await self.application.bot.send_message(chat_id=user_id, text=f"Ошибка при отправке прогноза: {str(e)}")
+
 
 
 
